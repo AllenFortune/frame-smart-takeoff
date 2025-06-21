@@ -8,6 +8,7 @@ interface FileDropZoneProps {
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
   isUploading: boolean;
+  hasExistingPlans?: boolean;
 }
 
 export const FileDropZone = ({
@@ -15,8 +16,21 @@ export const FileDropZone = ({
   onFileSelect,
   onDrop,
   onDragOver,
-  isUploading
+  isUploading,
+  hasExistingPlans = false
 }: FileDropZoneProps) => {
+  const getTitle = () => {
+    if (isUploading) return "Processing...";
+    if (hasExistingPlans) return "Add more PDF plans";
+    return "Drag & drop your PDF plans";
+  };
+
+  const getDescription = () => {
+    if (isUploading) return "Please wait while we process your files";
+    if (hasExistingPlans) return "Upload additional plans to your existing project";
+    return "or click to browse files";
+  };
+
   return (
     <div
       className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
@@ -29,10 +43,10 @@ export const FileDropZone = ({
     >
       <CloudUpload className={`w-16 h-16 mx-auto mb-4 ${isUploading ? "text-muted-foreground" : "text-primary"}`} />
       <h3 className="text-xl font-semibold mb-2">
-        {isUploading ? "Processing..." : "Drag & drop your PDF plans"}
+        {getTitle()}
       </h3>
       <p className="text-muted-foreground mb-4">
-        {isUploading ? "Please wait while we process your files" : "or click to browse files"}
+        {getDescription()}
       </p>
       <input
         type="file"
