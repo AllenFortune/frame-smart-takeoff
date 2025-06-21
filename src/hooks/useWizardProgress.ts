@@ -39,7 +39,17 @@ export const useWizardProgress = (projectId: string) => {
 
       if (error) throw error;
 
-      setProgress(data);
+      if (data) {
+        // Properly cast the database result to our interface
+        const progressData: WizardProgressData = {
+          id: data.id,
+          project_id: data.project_id,
+          user_id: data.user_id,
+          active_step: data.active_step,
+          step_data: data.step_data as WizardProgressData['step_data']
+        };
+        setProgress(progressData);
+      }
     } catch (error) {
       console.error('Error loading wizard progress:', error);
       toast({
@@ -77,7 +87,15 @@ export const useWizardProgress = (projectId: string) => {
 
       if (error) throw error;
 
-      setProgress(data);
+      // Properly cast the database result to our interface
+      const savedProgressData: WizardProgressData = {
+        id: data.id,
+        project_id: data.project_id,
+        user_id: data.user_id,
+        active_step: data.active_step,
+        step_data: data.step_data as WizardProgressData['step_data']
+      };
+      setProgress(savedProgressData);
     } catch (error) {
       console.error('Error saving wizard progress:', error);
       toast({
