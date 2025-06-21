@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -222,8 +221,8 @@ export const InteractiveCanvas = ({
     if (activeTool === 'select' && geojson?.features) {
       // Check for polygon click
       for (const feature of geojson.features) {
-        const coords = feature.geometry.coordinates[0];
-        if (isPointInPolygon([coords.x, coords.y], coords)) {
+        const polygonCoords = feature.geometry.coordinates[0];
+        if (isPointInPolygon([coords.x, coords.y], polygonCoords)) {
           setSelectedFeature(feature.properties.id);
           onPolygonClick?.(feature.properties.id);
           return;
