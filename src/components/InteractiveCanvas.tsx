@@ -67,13 +67,10 @@ export const InteractiveCanvas = ({
     );
   }
 
-  // Show loading state only if image hasn't started loading yet
-  const showLoadingState = !state.imageLoaded && imageUrl;
-
   return (
     <div className={`space-y-4 ${className}`}>
-      {/* Toolbar - only show when not loading */}
-      {!showLoadingState && (
+      {/* Toolbar - show once image is loaded */}
+      {state.imageLoaded && (
         <CanvasToolbar
           activeTool={state.activeTool}
           scale={state.scale}
@@ -87,32 +84,17 @@ export const InteractiveCanvas = ({
         />
       )}
 
-      {/* Loading state */}
-      {showLoadingState && (
-        <div className="border rounded-lg overflow-hidden bg-gray-100 relative" style={{ minHeight: '400px' }}>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center space-y-2">
-              <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
-              <p className="text-muted-foreground">Loading plan sheet...</p>
-              <p className="text-xs text-muted-foreground">URL: {imageUrl.substring(0, 50)}...</p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Canvas Container - always render but may show its own loading/error states */}
-      {!showLoadingState && (
-        <CanvasContainer
-          imageUrl={imageUrl}
-          geojson={geojson}
-          state={state}
-          onStateUpdate={updateState}
-          onPolygonClick={onPolygonClick}
-        />
-      )}
+      {/* Canvas Container - always render when we have imageUrl */}
+      <CanvasContainer
+        imageUrl={imageUrl}
+        geojson={geojson}
+        state={state}
+        onStateUpdate={updateState}
+        onPolygonClick={onPolygonClick}
+      />
 
       {/* Selected Feature Info */}
-      {selectedFeatureData && !showLoadingState && (
+      {selectedFeatureData && state.imageLoaded && (
         <FeatureInfoPanel
           selectedFeature={selectedFeatureData}
           onToggleInclusion={handleToggleInclusion}
@@ -121,7 +103,7 @@ export const InteractiveCanvas = ({
       )}
 
       {/* Touch Instructions for Mobile */}
-      {!showLoadingState && (
+      {state.imageLoaded && (
         <div className="block sm:hidden text-xs text-muted-foreground text-center space-y-1">
           <p>Tap to select • Pinch to zoom • Two-finger drag to pan</p>
           <p>Use toolbar buttons for drawing tools</p>

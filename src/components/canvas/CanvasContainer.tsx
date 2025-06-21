@@ -26,6 +26,7 @@ export const CanvasContainer = ({
   const canvasDrawingRef = useRef<CanvasDrawingRef>(null);
   const [imageLoadError, setImageLoadError] = useState<string>('');
   const [imageLoadTimeout, setImageLoadTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { handleCanvasMouseDown } = useCanvasInteractions({
     canvasDrawingRef,
@@ -51,6 +52,7 @@ export const CanvasContainer = ({
 
     // Reset states
     setImageLoadError('');
+    setIsLoading(true);
     onStateUpdate({ imageLoaded: false });
 
     const img = new Image();
@@ -60,6 +62,7 @@ export const CanvasContainer = ({
     const timeout = setTimeout(() => {
       console.error('CanvasContainer: Image load timeout after 30 seconds');
       setImageLoadError('Image load timeout - the image is taking too long to load');
+      setIsLoading(false);
       onStateUpdate({ imageLoaded: false });
     }, 30000);
     
@@ -75,6 +78,7 @@ export const CanvasContainer = ({
       
       imageRef.current = img;
       setImageLoadError('');
+      setIsLoading(false);
       
       // Set up canvas dimensions and scale
       const canvas = canvasDrawingRef.current?.getCanvas();
@@ -120,6 +124,7 @@ export const CanvasContainer = ({
       setImageLoadTimeout(null);
       
       setImageLoadError('Failed to load image - check if the URL is accessible');
+      setIsLoading(false);
       onStateUpdate({ imageLoaded: false });
     };
     
@@ -127,6 +132,7 @@ export const CanvasContainer = ({
       console.warn('CanvasContainer: Image load aborted');
       clearTimeout(timeout);
       setImageLoadTimeout(null);
+      setIsLoading(false);
     };
     
     console.log('CanvasContainer: Setting image src to trigger load...');
@@ -148,6 +154,25 @@ export const CanvasContainer = ({
     }
   }, [geojson, state.selectedFeature, state.activeTool, state.isDrawing, state.currentPath, state.imageLoaded]);
 
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div 
+        ref={containerRef}
+        className={`border rounded-lg overflow-hidden bg-gray-100 relative ${className}`}
+        style={{ minHeight: '400px', maxHeight: '70vh' }}
+      >
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="text-center space-y-2 p-4">
+            <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
+            <p className="text-muted-foreground font-medium">Loading plan sheet...</p>
+            <p className="text-xs text-muted-foreground">Loading: {imageUrl.substring(0, 50)}...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // Show error state
   if (imageLoadError) {
     return (
@@ -164,6 +189,7 @@ export const CanvasContainer = ({
             <button 
               onClick={() => {
                 setImageLoadError('');
+                setIsLoading(true);
                 // Trigger a re-render by updating a state value
                 onStateUpdate({ imageLoaded: false });
               }}
@@ -177,6 +203,7 @@ export const CanvasContainer = ({
     );
   }
 
+  // Show canvas when loaded
   return (
     <div 
       ref={containerRef}
