@@ -1,7 +1,7 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-const SIGNED_URL_TTL = parseInt(process.env.NEXT_PUBLIC_SIGNED_URL_TTL || '86400'); // 24 hours default
+const SIGNED_URL_TTL = parseInt(import.meta.env.VITE_SIGNED_URL_TTL || '86400'); // 24 hours default
 
 export async function ensureSignedUrl(path: string): Promise<string> {
   const { data, error } = await supabase.storage
