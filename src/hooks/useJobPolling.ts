@@ -87,22 +87,25 @@ export const useJobPolling = ({
         return;
       }
       
-      setJobs(data || []);
+      // Cast the data to JobStatus[] type
+      const jobsData = (data || []) as JobStatus[];
+      setJobs(jobsData);
       
       // Set current job if we have a specific job ID
-      if (jobId && data?.length) {
-        const job = data.find(j => j.id === jobId) || data[0];
-        setCurrentJob(job);
+      if (jobId && jobsData.length) {
+        const job = jobsData.find(j => j.id === jobId) || jobsData[0];
+        setCurrentJob(job as JobStatus);
         
         // Stop polling if job is completed or failed
         if (['completed', 'failed', 'cancelled'].includes(job.status)) {
           stopPolling();
         }
-      } else if (data?.length) {
+      } else if (jobsData.length) {
         // Get the most recent job if no specific job ID
-        setCurrentJob(data[0]);
+        const mostRecentJob = jobsData[0] as JobStatus;
+        setCurrentJob(mostRecentJob);
         
-        if (['completed', 'failed', 'cancelled'].includes(data[0].status)) {
+        if (['completed', 'failed', 'cancelled'].includes(mostRecentJob.status)) {
           stopPolling();
         }
       }
@@ -223,7 +226,7 @@ export const useJobPolling = ({
         return null;
       }
 
-      return data;
+      return data as JobStatus;
     } catch (error) {
       console.error('Error creating job:', error);
       return null;
