@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 
@@ -73,15 +72,45 @@ export const useProjectData = (projectId: string) => {
       if (projectError) throw projectError;
       setProject(projectData);
 
-      // Fetch pages
+      // Fetch pages - get only the most recent entry per page number
+      // This handles duplicate entries by selecting the latest created_at for each page_no
       const { data: pagesData, error: pagesError } = await supabase
         .from('plan_pages')
         .select('*')
         .eq('project_id', projectId)
-        .order('page_no');
+        .order('page_no')
+        .order('created_at', { ascending: false });
 
       if (pagesError) throw pagesError;
-      setPages(pagesData || []);
+
+      // Deduplicate pages by keeping only the most recent entry per page_no
+      const uniquePages = pagesData ? 
+        pagesData.reduce((acc: PlanPage[], current: PlanPage) => {
+          const existingPageIndex = acc.findIndex(page => page.page_no === current.page_no);
+          if (existingPageIndex === -1) {
+            // No existing page with this page_no, add it
+            acc.push(current);
+          } else {
+            // Compare creation dates and keep the more recent one
+            const existingPage = acc[existingPageIndex];
+            if (new Date(current.created_at) > new Date(existingPage.created_at)) {
+              acc[existingPageIndex] = current;
+            }
+          }
+          return acc;
+        }, []).sort((a, b) => a.page_no - b.page_no) : [];
+
+      console.log(`Fetched ${pagesData?.length || 0} total page entries, deduped to ${uniquePages.length} unique pages`);
+      setPages(uniquePages);
+
+      // Debug: Log image URLs to check their format
+      uniquePages.forEach(page => {
+        if (page.img_url) {
+          console.log(`Page ${page.page_no} image URL: ${page.img_url}`);
+        } else {
+          console.log(`Page ${page.page_no} has no image URL`);
+        }
+      });
 
       // Fetch summary with proper type handling
       const { data: summaryData, error: summaryError } = await supabase
@@ -104,8 +133,8 @@ export const useProjectData = (projectId: string) => {
       }
 
       // Fetch overlays
-      if (pagesData?.length) {
-        const pageIds = pagesData.map(p => p.id);
+      if (uniquePages?.length) {
+        const pageIds = uniquePages.map(p => p.id);
         const { data: overlaysData, error: overlaysError } = await supabase
           .from('plan_overlays')
           .select('*')

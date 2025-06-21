@@ -32,11 +32,34 @@ export const PageImage = ({
     (page.img_url.includes('supabase') || page.img_url.startsWith('http'));
 
   const handleImageLoad = () => {
+    console.log(`Image loaded successfully for page ${page.page_no}: ${page.img_url}`);
     setImageLoading(false);
   };
 
   const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error(`Image failed to load for page ${page.page_no}:`, page.img_url);
+    console.error(`Image failed to load for page ${page.page_no}:`, {
+      url: page.img_url,
+      error: e,
+      naturalWidth: (e.target as HTMLImageElement).naturalWidth,
+      naturalHeight: (e.target as HTMLImageElement).naturalHeight
+    });
+    
+    // Try to access the image directly to get more info
+    if (page.img_url) {
+      fetch(page.img_url, { method: 'HEAD' })
+        .then(response => {
+          console.log(`HEAD request for page ${page.page_no} image:`, {
+            status: response.status,
+            statusText: response.statusText,
+            contentType: response.headers.get('content-type'),
+            contentLength: response.headers.get('content-length')
+          });
+        })
+        .catch(fetchError => {
+          console.error(`HEAD request failed for page ${page.page_no}:`, fetchError);
+        });
+    }
+    
     setImageLoading(false);
     onImageError(page.id);
   };

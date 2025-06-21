@@ -4,7 +4,7 @@ import { useToast } from '@/hooks/use-toast';
 import { PageGridHeader } from './pages/PageGridHeader';
 import { PageGridView } from './pages/PageGridView';
 import { PageCarouselView } from './pages/PageCarouselView';
-import { debugStorageIssues } from '@/utils/storageUtils';
+import { debugStorageIssues, cleanupDuplicatePages } from '@/utils/storageUtils';
 
 interface PlanPage {
   id: string;
@@ -43,11 +43,16 @@ export const MobileOptimizedPageGrid = ({
 
   const filteredPages = pages.filter(page => page.confidence >= confidenceThreshold[0]);
 
-  // Debug storage issues when pages load
+  // Debug storage issues and cleanup duplicates when pages load
   useEffect(() => {
-    if (pages.length > 0 && pages[0]) {
-      const projectId = pages[0].id.split('-')[0]; // Extract project ID pattern
-      debugStorageIssues('88029b42-1180-43a2-8870-96c230575cb3'); // Use actual project ID
+    if (pages.length > 0) {
+      // Extract project ID from the first page's project_id or from URL
+      const projectId = pages[0].project_id || window.location.pathname.split('/')[2];
+      if (projectId) {
+        console.log(`Running storage debug and cleanup for project: ${projectId}`);
+        debugStorageIssues(projectId);
+        cleanupDuplicatePages(projectId);
+      }
     }
   }, [pages]);
 
@@ -55,9 +60,9 @@ export const MobileOptimizedPageGrid = ({
     setImageErrors(prev => new Set([...prev, pageId]));
     toast({
       title: "Image Load Error",
-      description: "Some page images failed to load. Check storage permissions.",
+      description: "Some page images failed to load. Check console for details.",
       variant: "destructive",
-      duration: 3000
+      duration: 5000
     });
   };
 
