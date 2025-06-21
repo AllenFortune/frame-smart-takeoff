@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageGridHeader } from './pages/PageGridHeader';
@@ -35,6 +36,7 @@ export const MobileOptimizedPageGrid = ({
   onSelectAllRelevant,
   onContinue
 }: MobileOptimizedPageGridProps) => {
+  const { id: projectId } = useParams();
   const [currentPage, setCurrentPage] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'carousel'>('grid');
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -45,16 +47,12 @@ export const MobileOptimizedPageGrid = ({
 
   // Debug storage issues and cleanup duplicates when pages load
   useEffect(() => {
-    if (pages.length > 0) {
-      // Extract project ID from the first page's project_id or from URL
-      const projectId = pages[0].project_id || window.location.pathname.split('/')[2];
-      if (projectId) {
-        console.log(`Running storage debug and cleanup for project: ${projectId}`);
-        debugStorageIssues(projectId);
-        cleanupDuplicatePages(projectId);
-      }
+    if (pages.length > 0 && projectId) {
+      console.log(`Running storage debug and cleanup for project: ${projectId}`);
+      debugStorageIssues(projectId);
+      cleanupDuplicatePages(projectId);
     }
-  }, [pages]);
+  }, [pages, projectId]);
 
   const handleImageError = (pageId: string) => {
     setImageErrors(prev => new Set([...prev, pageId]));
