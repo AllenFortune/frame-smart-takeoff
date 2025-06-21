@@ -30,6 +30,7 @@ export const CanvasContainer = ({
   const [imageLoadError, setImageLoadError] = useState<string>('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadedImage, setLoadedImage] = useState<HTMLImageElement | null>(null);
+  const [retryCount, setRetryCount] = useState(0);
 
   const { handleCanvasMouseDown } = useCanvasInteractions({
     canvasDrawingRef,
@@ -47,36 +48,49 @@ export const CanvasContainer = ({
   });
 
   const { imageRef } = useImageLoader({
-    imageUrl,
+    imageUrl: imageUrl + `?retry=${retryCount}`, // Add retry parameter to bypass cache
     onImageLoad: (img) => {
+      console.log('CanvasContainer: Image loaded successfully');
       setLoadedImage(img);
       setupCanvasWithImage(img);
     },
     onLoadingChange: setIsLoading,
-    onError: setImageLoadError
+    onError: (error) => {
+      console.error('CanvasContainer: Image load error:', error);
+      setImageLoadError(error);
+    }
   });
 
   // Draw canvas when dependencies change
   useEffect(() => {
     if (state.imageLoaded && loadedImage) {
+      console.log('CanvasContainer: Triggering redraw due to state change');
       triggerCanvasRedraw();
     }
   }, [geojson, state.selectedFeature, state.activeTool, state.isDrawing, state.currentPath, state.imageLoaded]);
 
   const handleRetry = () => {
+    console.log('CanvasContainer: Retrying image load');
     setImageLoadError('');
     setIsLoading(true);
+    setRetryCount(prev => prev + 1);
     onStateUpdate({ imageLoaded: false });
   };
 
   // Show loading state
-  if (isLoading) {
+  if (isLoading && !imageLoadError) {
     return <CanvasLoadingState imageUrl={imageUrl} className={className} />;
   }
 
   // Show error state
   if (imageLoadError) {
-    return <CanvasErrorState error={imageLoadError} onRetry={handleRetry} className={className} />;
+    return (
+      <CanvasErrorState 
+        error={imageLoadError} 
+        onRetry={handleRetry} 
+        className={className} 
+      />
+    );
   }
 
   // Show canvas when loaded

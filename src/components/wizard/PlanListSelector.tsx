@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PlanPage } from "@/hooks/useProjectData";
 import { FileText, CheckCircle2 } from "lucide-react";
+import { PlanThumbnail } from "./PlanThumbnail";
 
 interface PlanListSelectorProps {
   pages: PlanPage[];
@@ -99,6 +100,9 @@ export const PlanListSelector = ({
                 onChange={() => onPageToggle(page.id)}
                 className="pointer-events-none"
               />
+              
+              {/* Plan Thumbnail */}
+              <PlanThumbnail page={page} size="medium" className="flex-shrink-0" />
               
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 mb-1">

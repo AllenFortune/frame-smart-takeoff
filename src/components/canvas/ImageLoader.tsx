@@ -20,6 +20,7 @@ export const useImageLoader = ({
   useEffect(() => {
     if (!imageUrl) {
       console.log('ImageLoader: No image URL provided');
+      onLoadingChange(false);
       return;
     }
 
@@ -37,12 +38,12 @@ export const useImageLoader = ({
     const img = new Image();
     img.crossOrigin = 'anonymous';
     
-    // Set up timeout for image loading (30 seconds)
+    // Set up timeout for image loading (15 seconds - reduced from 30)
     const timeout = setTimeout(() => {
-      console.error('ImageLoader: Image load timeout after 30 seconds');
-      onError('Image load timeout - the image is taking too long to load');
+      console.error('ImageLoader: Image load timeout after 15 seconds');
+      onError('Image load timeout - please check your connection and try again');
       onLoadingChange(false);
-    }, 30000);
+    }, 15000);
     
     setImageLoadTimeout(timeout);
     
@@ -53,6 +54,14 @@ export const useImageLoader = ({
       
       clearTimeout(timeout);
       setImageLoadTimeout(null);
+      
+      // Check if this is a valid image (not a 1x1 placeholder)
+      if (img.naturalWidth <= 1 || img.naturalHeight <= 1) {
+        console.warn('ImageLoader: Loaded image appears to be a placeholder');
+        onError('Image appears to be a placeholder - the actual plan image may not be available');
+        onLoadingChange(false);
+        return;
+      }
       
       imageRef.current = img;
       onError('');
@@ -67,7 +76,7 @@ export const useImageLoader = ({
       clearTimeout(timeout);
       setImageLoadTimeout(null);
       
-      onError('Failed to load image - check if the URL is accessible');
+      onError('Failed to load plan image - the URL may be expired or inaccessible');
       onLoadingChange(false);
     };
     
