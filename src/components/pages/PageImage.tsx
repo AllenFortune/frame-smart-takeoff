@@ -1,9 +1,9 @@
 
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
-import { AlertCircle, RefreshCw } from 'lucide-react';
+import { AlertCircle, RefreshCw, ZoomIn, Image } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { refreshSignedUrl, isSignedUrlExpired, checkImageHealth, retryWithExponentialBackoff, ensureSignedUrl } from '@/lib/storage';
+import { useMultiResolutionImage } from '@/hooks/useMultiResolutionImage';
 
 interface PlanPage {
   id: string;
@@ -11,6 +11,9 @@ interface PlanPage {
   class: string;
   confidence: number;
   img_url: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  full_url: string | null;
   project_id?: string;
 }
 
@@ -20,6 +23,8 @@ interface PageImageProps {
   onImageError: (pageId: string) => void;
   onRetryImage: (pageId: string) => void;
   projectId?: string;
+  preferredResolution?: 'thumbnail' | 'preview' | 'full';
+  showResolutionControls?: boolean;
 }
 
 export const PageImage = ({ 
@@ -27,104 +32,49 @@ export const PageImage = ({
   imageErrors, 
   onImageError, 
   onRetryImage,
-  projectId 
+  projectId,
+  preferredResolution = 'preview',
+  showResolutionControls = false
 }: PageImageProps) => {
-  const [imageLoading, setImageLoading] = useState(true);
-  const [currentUrl, setCurrentUrl] = useState(page.img_url);
-  const [retryCount, setRetryCount] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [manualRetryCount, setManualRetryCount] = useState(0);
   
-  const hasError = imageErrors.has(page.id);
-  const maxRetries = 3;
+  const {
+    currentUrl,
+    currentResolution,
+    isLoading,
+    error,
+    isRefreshing,
+    handleImageLoad,
+    handleImageError,
+    switchResolution,
+    hasHigherResolution,
+    refreshUrl,
+    availableResolutions
+  } = useMultiResolutionImage({
+    page,
+    preferredResolution,
+    projectId,
+    onError: (pageId) => {
+      onImageError(pageId);
+    }
+  });
 
-  // Check if this is an upload failed page
+  const hasError = imageErrors.has(page.id) || !!error;
   const isUploadFailed = page.class === 'upload_failed';
 
-  // Auto-refresh expired URLs on component mount
-  useEffect(() => {
-    const initializeUrl = async () => {
-      if (!currentUrl || !projectId || isUploadFailed) return;
-      
-      if (isSignedUrlExpired(currentUrl)) {
-        console.log(`URL expired for page ${page.page_no}, refreshing on mount...`);
-        await handleUrlRefresh();
-      }
-    };
-    
-    initializeUrl();
-  }, []);
-
-  const handleUrlRefresh = async () => {
-    if (!projectId || isRefreshing || isUploadFailed) return;
-    
-    setIsRefreshing(true);
-    
-    try {
-      console.log(`Refreshing signed URL for page ${page.page_no}`);
-      
-      const freshUrl = await retryWithExponentialBackoff(
-        () => refreshSignedUrl(projectId, page.page_no),
-        2,
-        500
-      );
-      
-      setCurrentUrl(freshUrl);
-      setRetryCount(prev => prev + 1);
-      
-      console.log(`Successfully refreshed URL for page ${page.page_no}`);
-      
-      // Clear any existing errors since we have a fresh URL
-      if (hasError) {
-        onRetryImage(page.id);
-      }
-      
-    } catch (error) {
-      console.error(`Failed to refresh URL for page ${page.page_no}:`, error);
-      
-      if (retryCount >= maxRetries) {
-        console.error(`Max retries exceeded for page ${page.page_no}`);
-        onImageError(page.id);
-      }
-    } finally {
-      setIsRefreshing(false);
-    }
-  };
-
-  const handleImageLoad = useCallback(() => {
-    console.log(`Image loaded successfully for page ${page.page_no}`);
-    setImageLoading(false);
-    setRetryCount(0); // Reset retry count on successful load
-  }, [page.page_no]);
-
-  const handleImageError = useCallback(async (e: React.SyntheticEvent<HTMLImageElement>) => {
-    console.error(`Image failed to load for page ${page.page_no}:`, {
-      url: currentUrl,
-      naturalWidth: (e.target as HTMLImageElement).naturalWidth,
-      naturalHeight: (e.target as HTMLImageElement).naturalHeight,
-      retryCount
-    });
-    
-    setImageLoading(false);
-    
-    // If we haven't hit max retries, try to refresh the URL
-    if (retryCount < maxRetries && projectId && !isRefreshing && !isUploadFailed) {
-      console.log(`Attempting URL refresh for page ${page.page_no} (attempt ${retryCount + 1})`);
-      await handleUrlRefresh();
-    } else {
-      // Mark as error if we've exhausted retries
-      onImageError(page.id);
-    }
-  }, [currentUrl, page.page_no, page.id, retryCount, projectId, isRefreshing, onImageError, isUploadFailed]);
-
-  const handleManualRetry = () => {
+  const handleManualRetry = useCallback(() => {
     console.log(`Manual retry requested for page ${page.page_no}`);
-    setRetryCount(0);
+    setManualRetryCount(prev => prev + 1);
     onRetryImage(page.id);
     
     if (projectId && !isUploadFailed) {
-      handleUrlRefresh();
+      refreshUrl();
     }
-  };
+  }, [page.page_no, page.id, projectId, isUploadFailed, refreshUrl, onRetryImage]);
+
+  const handleResolutionSwitch = useCallback((resolution: 'thumbnail' | 'preview' | 'full') => {
+    switchResolution(resolution);
+  }, [switchResolution]);
 
   // Show placeholder for upload failed pages
   if (isUploadFailed) {
@@ -138,8 +88,8 @@ export const PageImage = ({
     );
   }
 
-  // Show placeholder if no URL, has error, or exceeded retries
-  if (!currentUrl || (hasError && retryCount >= maxRetries)) {
+  // Show placeholder if no URL or has persistent error
+  if (!currentUrl || (hasError && manualRetryCount >= 3)) {
     return (
       <PlaceholderImage
         pageNo={page.page_no}
@@ -151,9 +101,9 @@ export const PageImage = ({
   }
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative group">
       {/* Loading spinner */}
-      {(imageLoading || isRefreshing) && (
+      {(isLoading || isRefreshing) && (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
           <div className="flex flex-col items-center gap-2">
             <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
@@ -172,8 +122,64 @@ export const PageImage = ({
         loading="lazy"
         onLoad={handleImageLoad}
         onError={handleImageError}
-        style={{ display: (imageLoading || isRefreshing) ? 'none' : 'block' }}
+        style={{ display: (isLoading || isRefreshing) ? 'none' : 'block' }}
       />
+      
+      {/* Resolution controls */}
+      {showResolutionControls && (
+        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="flex gap-1">
+            {availableResolutions.thumbnail && (
+              <Button
+                size="sm"
+                variant={currentResolution === 'thumbnail' ? 'default' : 'outline'}
+                onClick={() => handleResolutionSwitch('thumbnail')}
+                className="h-6 px-2 text-xs"
+              >
+                S
+              </Button>
+            )}
+            {availableResolutions.preview && (
+              <Button
+                size="sm"
+                variant={currentResolution === 'preview' ? 'default' : 'outline'}
+                onClick={() => handleResolutionSwitch('preview')}
+                className="h-6 px-2 text-xs"
+              >
+                M
+              </Button>
+            )}
+            {availableResolutions.full && (
+              <Button
+                size="sm"
+                variant={currentResolution === 'full' ? 'default' : 'outline'}
+                onClick={() => handleResolutionSwitch('full')}
+                className="h-6 px-2 text-xs"
+              >
+                L
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Higher resolution indicator */}
+      {hasHigherResolution && !showResolutionControls && (
+        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+          <div className="flex items-center gap-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
+            <ZoomIn className="w-3 h-3" />
+            <span>HD Available</span>
+          </div>
+        </div>
+      )}
+      
+      {/* Resolution indicator */}
+      <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+        <div className="flex items-center gap-1">
+          <Image className="w-3 h-3" />
+          <span className="capitalize">{currentResolution}</span>
+        </div>
+      </div>
       
       {/* Error indicator and retry button */}
       {hasError && (
@@ -194,9 +200,9 @@ export const PageImage = ({
       )}
       
       {/* Retry count indicator (for debugging) */}
-      {retryCount > 0 && (
-        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-1 rounded">
-          Retry {retryCount}/{maxRetries}
+      {manualRetryCount > 0 && (
+        <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1 rounded">
+          Retry {manualRetryCount}/3
         </div>
       )}
     </div>

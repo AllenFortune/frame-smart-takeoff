@@ -127,28 +127,37 @@ export type Database = {
           class: string
           confidence: number
           created_at: string
+          full_url: string | null
           id: string
           img_url: string | null
           page_no: number
+          preview_url: string | null
           project_id: string
+          thumbnail_url: string | null
         }
         Insert: {
           class: string
           confidence?: number
           created_at?: string
+          full_url?: string | null
           id?: string
           img_url?: string | null
           page_no: number
+          preview_url?: string | null
           project_id: string
+          thumbnail_url?: string | null
         }
         Update: {
           class?: string
           confidence?: number
           created_at?: string
+          full_url?: string | null
           id?: string
           img_url?: string | null
           page_no?: number
+          preview_url?: string | null
           project_id?: string
+          thumbnail_url?: string | null
         }
         Relationships: [
           {
@@ -242,6 +251,94 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      thumbnail_cache: {
+        Row: {
+          cache_hit_count: number | null
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          last_accessed: string | null
+          metadata: Json | null
+          pdf_hash: string
+          pdf_url: string
+          project_id: string
+        }
+        Insert: {
+          cache_hit_count?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          last_accessed?: string | null
+          metadata?: Json | null
+          pdf_hash: string
+          pdf_url: string
+          project_id: string
+        }
+        Update: {
+          cache_hit_count?: number | null
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          last_accessed?: string | null
+          metadata?: Json | null
+          pdf_hash?: string
+          pdf_url?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thumbnail_cache_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      thumbnail_metadata: {
+        Row: {
+          compression_level: number | null
+          created_at: string | null
+          dimensions: Json | null
+          file_sizes: Json | null
+          format: string | null
+          generation_time_ms: number | null
+          id: string
+          page_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          compression_level?: number | null
+          created_at?: string | null
+          dimensions?: Json | null
+          file_sizes?: Json | null
+          format?: string | null
+          generation_time_ms?: number | null
+          id?: string
+          page_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          compression_level?: number | null
+          created_at?: string | null
+          dimensions?: Json | null
+          file_sizes?: Json | null
+          format?: string | null
+          generation_time_ms?: number | null
+          id?: string
+          page_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "thumbnail_metadata_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "plan_pages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       wizard_progress: {
         Row: {

@@ -28,6 +28,31 @@ export const classifyPages = async (projectId: string, pdfUrl: string) => {
   return result;
 };
 
+export const generateThumbnails = async (projectId: string, pdfUrl: string, pageIds?: string[]) => {
+  console.log(`Calling generate-thumbnails function with projectId: ${projectId}, pdfUrl: ${pdfUrl}`);
+  
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/generate-thumbnails`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    },
+    body: JSON.stringify({ projectId, pdfUrl, pageIds })
+  });
+
+  console.log(`generate-thumbnails response status: ${response.status}`);
+  
+  const result = await response.json();
+  console.log('generate-thumbnails response:', result);
+
+  if (!response.ok) {
+    console.error('generate-thumbnails failed:', result);
+    throw new Error(result.message || 'Failed to generate thumbnails');
+  }
+
+  return result;
+};
+
 export const extractSummary = async (projectId: string, pageIds: string[]) => {
   const response = await fetch(`${SUPABASE_URL}/functions/v1/extract-summary`, {
     method: 'POST',

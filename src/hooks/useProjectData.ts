@@ -17,6 +17,9 @@ export interface PlanPage {
   class: string;
   confidence: number;
   img_url: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  full_url: string | null;
   created_at: string;
 }
 
@@ -76,7 +79,7 @@ export const useProjectData = (projectId: string) => {
       setProject(projectData);
       console.log('Fetched project:', projectData?.name);
 
-      // Fetch pages - get only the most recent entry per page number to handle duplicates
+      // Fetch pages with new multi-resolution URLs
       const { data: pagesData, error: pagesError } = await supabase
         .from('plan_pages')
         .select('*')
@@ -103,20 +106,22 @@ export const useProjectData = (projectId: string) => {
 
       console.log(`Fetched ${pagesData?.length || 0} total page entries, deduped to ${uniquePages.length} unique pages`);
 
-      // Process URLs - refresh expired ones in background
+      // Process URLs - prioritize multi-resolution URLs
       const pagesWithValidUrls = await Promise.all(
         uniquePages.map(async (page) => {
-          if (!page.img_url) {
+          // Use the best available URL - prefer preview_url, fallback to img_url
+          const bestUrl = page.preview_url || page.img_url;
+          
+          if (!bestUrl) {
             console.log(`Page ${page.page_no} has no image URL`);
             return page;
           }
 
-          // Check if URL is expired
-          if (isSignedUrlExpired(page.img_url)) {
+          // Check if URL is expired for signed URLs
+          if (isSignedUrlExpired(bestUrl)) {
             console.log(`URL expired for page ${page.page_no}, will refresh on demand`);
-            // Don't refresh here to avoid blocking the UI - let PageImage component handle it
           } else {
-            console.log(`Page ${page.page_no} has valid URL`);
+            console.log(`Page ${page.page_no} has valid URL (resolution: ${page.preview_url ? 'preview' : 'fallback'})`);
           }
 
           return page;

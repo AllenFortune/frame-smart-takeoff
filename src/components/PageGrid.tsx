@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +7,7 @@ import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { PageImage } from '@/components/ui/page-image';
 
 interface PlanPage {
   id: string;
@@ -27,6 +27,7 @@ export const PageGrid = ({ projectId, onContinue }: PageGridProps) => {
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
   const [loading, setLoading] = useState(true);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   useEffect(() => {
@@ -59,6 +60,18 @@ export const PageGrid = ({ projectId, onContinue }: PageGridProps) => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleImageError = (pageId: string) => {
+    setImageErrors(prev => new Set([...prev, pageId]));
+  };
+
+  const handleRetryImage = (pageId: string) => {
+    setImageErrors(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(pageId);
+      return newSet;
+    });
   };
 
   const togglePage = (pageId: string) => {
@@ -133,17 +146,15 @@ export const PageGrid = ({ projectId, onContinue }: PageGridProps) => {
           <Card key={page.id} className="relative group cursor-pointer hover:shadow-lg transition-shadow">
             <div className="p-4">
               <div className="aspect-[3/4] bg-gray-100 rounded-lg overflow-hidden mb-3">
-                {page.img_url ? (
-                  <img 
-                    src={page.img_url} 
-                    alt={`Page ${page.page_no}`}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    Page {page.page_no}
-                  </div>
-                )}
+                <PageImage 
+                  page={page}
+                  imageErrors={imageErrors}
+                  onImageError={handleImageError}
+                  onRetryImage={handleRetryImage}
+                  projectId={projectId}
+                  preferredResolution="thumbnail"
+                  showResolutionControls={false}
+                />
               </div>
               
               <div className="space-y-2">
