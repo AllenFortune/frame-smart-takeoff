@@ -1,44 +1,77 @@
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Plus, FolderOpen, Calendar, DollarSign } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Project {
+  id: string;
+  name: string;
+  owner: string;
+  created_at: string;
+  updated_at: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
-  const [projects] = useState([
-    {
-      id: "1",
-      name: "Riverside Townhomes - Phase 1",
-      status: "In Progress",
-      created: "2024-01-15",
-      value: "$45,230",
-      sheets: 12,
-    },
-    {
-      id: "2",
-      name: "Oak Street Duplex",
-      status: "Complete",
-      created: "2024-01-10",
-      value: "$18,750",
-      sheets: 6,
-    },
-    {
-      id: "3",
-      name: "Mountain View SFR",
-      status: "Review",
-      created: "2024-01-08",
-      value: "$32,100",
-      sheets: 8,
-    },
-  ]);
+  const { user } = useAuth();
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const handleNewProject = () => {
-    const newProjectId = Date.now().toString();
-    navigate(`/project/${newProjectId}/upload`);
+  useEffect(() => {
+    if (user) {
+      fetchProjects();
+    }
+  }, [user]);
+
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('owner', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching projects:', error);
+        return;
+      }
+
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleNewProject = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          name: `New Project ${new Date().toLocaleDateString()}`,
+          owner: user.id
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating project:', error);
+        return;
+      }
+
+      navigate(`/project/${data.id}/upload`);
+    } catch (error) {
+      console.error('Error creating project:', error);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -53,6 +86,17 @@ const Dashboard = () => {
         return "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200";
     }
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -85,8 +129,8 @@ const Dashboard = () => {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <FolderOpen className="w-8 h-8 text-primary" />
-                  <Badge className={getStatusColor(project.status)}>
-                    {project.status}
+                  <Badge className={getStatusColor("In Progress")}>
+                    In Progress
                   </Badge>
                 </div>
                 <CardTitle className="text-lg">{project.name}</CardTitle>
@@ -95,15 +139,15 @@ const Dashboard = () => {
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center text-muted-foreground">
                     <Calendar className="w-4 h-4 mr-1" />
-                    {new Date(project.created).toLocaleDateString()}
+                    {new Date(project.created_at).toLocaleDateString()}
                   </div>
                   <div className="text-muted-foreground">
-                    {project.sheets} sheets
+                    0 sheets
                   </div>
                 </div>
                 <div className="flex items-center text-lg font-semibold text-secondary">
                   <DollarSign className="w-5 h-5 mr-1" />
-                  {project.value}
+                  Pending
                 </div>
               </CardContent>
             </Card>
