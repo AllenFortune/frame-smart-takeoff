@@ -3,9 +3,11 @@ import { WizardPageSelection } from "./WizardPageSelection";
 import { WizardAnalysisStep } from "./WizardAnalysisStep";
 import { PlanPage } from "@/hooks/useProjectData";
 import { StepData } from "@/hooks/useWizardSteps";
-import { useParams, useState } from "react";
-import { AlertCircle, Button } from "@/components/ui/icons";
-import { ThumbnailDebugPanel } from "@/components/ui/thumbnail-debug-panel";
+import { useParams } from "react-router-dom";
+import { useState } from "react";
+import { AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ThumbnailDebugPanel } from "./ThumbnailDebugPanel";
 
 interface WizardContentProps {
   steps: StepData[];
