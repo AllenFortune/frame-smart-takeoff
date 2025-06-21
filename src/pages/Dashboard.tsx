@@ -235,7 +235,7 @@ const Dashboard = () => {
                     {new Date(project.created_at).toLocaleDateString()}
                   </div>
                   <div className="text-muted-foreground">
-                    0 sheets
+                    {project.sheet_count} {project.sheet_count === 1 ? 'sheet' : 'sheets'}
                   </div>
                 </div>
                 <div className="flex items-center text-lg font-semibold text-secondary">

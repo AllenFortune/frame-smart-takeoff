@@ -9,6 +9,7 @@ interface Project {
   owner: string;
   created_at: string;
   updated_at: string;
+  sheet_count: number;
 }
 
 interface UseProjectsDataReturn {
@@ -112,10 +113,13 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
         }, 10000); // 10 second timeout
       });
 
-      // Make the actual request with timeout
+      // Make the actual request with timeout - now including sheet count
       const requestPromise = supabase
         .from('projects')
-        .select('*')
+        .select(`
+          *,
+          sheet_count:plan_pages(count)
+        `)
         .eq('owner', userId)
         .order('created_at', { ascending: false })
         .abortSignal(signal);
@@ -140,8 +144,14 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
         throw new Error(`Database error: ${supabaseError.message}`);
       }
 
-      console.log(`useProjectsData: Successfully fetched ${data?.length || 0} projects`);
-      setProjects(data || []);
+      // Transform the data to flatten the sheet_count
+      const transformedData = data?.map((project: any) => ({
+        ...project,
+        sheet_count: project.sheet_count?.[0]?.count || 0
+      })) || [];
+
+      console.log(`useProjectsData: Successfully fetched ${transformedData?.length || 0} projects`);
+      setProjects(transformedData);
       setRetryCount(0); // Reset retry count on success
       
       if (retryAttempt > 0) {
