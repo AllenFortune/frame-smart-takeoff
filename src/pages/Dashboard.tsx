@@ -8,6 +8,7 @@ import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Project {
   id: string;
@@ -20,57 +21,121 @@ interface Project {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (user) {
+      console.log('Dashboard: User found, fetching projects for user:', user.id);
       fetchProjects();
+    } else {
+      console.log('Dashboard: No user found');
+      setLoading(false);
     }
   }, [user]);
 
   const fetchProjects = async () => {
+    if (!user) {
+      console.log('fetchProjects: No user available');
+      return;
+    }
+
     try {
+      console.log('fetchProjects: Starting fetch for user:', user.id);
+      
       const { data, error } = await supabase
         .from('projects')
         .select('*')
-        .eq('owner', user?.id)
+        .eq('owner', user.id)
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching projects:', error);
+        console.error('fetchProjects: Error fetching projects:', error);
+        toast({
+          title: "Error",
+          description: "Failed to load projects. Please try again.",
+          variant: "destructive",
+        });
         return;
       }
 
+      console.log('fetchProjects: Successfully fetched projects:', data);
       setProjects(data || []);
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('fetchProjects: Unexpected error:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while loading projects.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleNewProject = async () => {
-    if (!user) return;
+    if (!user) {
+      console.log('handleNewProject: No user available');
+      toast({
+        title: "Error",
+        description: "Please log in to create a project.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (creating) {
+      console.log('handleNewProject: Already creating a project');
+      return;
+    }
+
+    setCreating(true);
+    console.log('handleNewProject: Starting project creation for user:', user.id);
     
     try {
+      const projectName = `New Project ${new Date().toLocaleDateString()}`;
+      console.log('handleNewProject: Creating project with name:', projectName);
+      
       const { data, error } = await supabase
         .from('projects')
         .insert({
-          name: `New Project ${new Date().toLocaleDateString()}`,
+          name: projectName,
           owner: user.id
         })
         .select()
         .single();
 
       if (error) {
-        console.error('Error creating project:', error);
+        console.error('handleNewProject: Error creating project:', error);
+        toast({
+          title: "Error",
+          description: `Failed to create project: ${error.message}`,
+          variant: "destructive",
+        });
         return;
       }
 
+      console.log('handleNewProject: Successfully created project:', data);
+      
+      toast({
+        title: "Success",
+        description: "Project created successfully!",
+      });
+
+      // Navigate to upload page
+      console.log('handleNewProject: Navigating to upload page for project:', data.id);
       navigate(`/project/${data.id}/upload`);
     } catch (error) {
-      console.error('Error creating project:', error);
+      console.error('handleNewProject: Unexpected error:', error);
+      toast({
+        title: "Error",
+        description: "An unexpected error occurred while creating the project.",
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -111,11 +176,12 @@ const Dashboard = () => {
           </div>
           <Button
             onClick={handleNewProject}
+            disabled={creating}
             className="rounded-full bg-primary hover:bg-primary/90"
             size="lg"
           >
             <Plus className="w-5 h-5 mr-2" />
-            New Project
+            {creating ? "Creating..." : "New Project"}
           </Button>
         </div>
 
@@ -163,10 +229,11 @@ const Dashboard = () => {
             </p>
             <Button
               onClick={handleNewProject}
+              disabled={creating}
               className="rounded-full bg-primary hover:bg-primary/90"
             >
               <Plus className="w-5 h-5 mr-2" />
-              Create First Project
+              {creating ? "Creating..." : "Create First Project"}
             </Button>
           </div>
         )}
