@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Slider } from '@/components/ui/slider';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ChevronLeft, ChevronRight, Grid, List } from 'lucide-react';
+import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
 
 interface PlanPage {
   id: string;
@@ -40,9 +40,22 @@ export const MobileOptimizedPageGrid = ({
   const [currentPage, setCurrentPage] = useState(0);
   const [viewMode, setViewMode] = useState<'grid' | 'carousel'>('grid');
   const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [imageErrors, setImageErrors] = useState<Set<string>>(new Set());
   const { toast } = useToast();
 
   const filteredPages = pages.filter(page => page.confidence >= confidenceThreshold[0]);
+
+  const handleImageError = (pageId: string) => {
+    setImageErrors(prev => new Set([...prev, pageId]));
+  };
+
+  const retryImage = (pageId: string) => {
+    setImageErrors(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(pageId);
+      return newSet;
+    });
+  };
 
   // Touch handlers for swipe navigation
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -81,6 +94,31 @@ export const MobileOptimizedPageGrid = ({
       title: selectedPages.has(pageId) ? "Page deselected" : "Page selected",
       duration: 1000
     });
+  };
+
+  const PageImage = ({ page }: { page: PlanPage }) => {
+    const hasError = imageErrors.has(page.id);
+
+    if (!page.img_url || hasError) {
+      return (
+        <PlaceholderImage
+          pageNo={page.page_no}
+          className="w-full h-full"
+          error={hasError}
+          onRetry={() => retryImage(page.id)}
+        />
+      );
+    }
+
+    return (
+      <img 
+        src={page.img_url} 
+        alt={`Page ${page.page_no}`}
+        className="w-full h-full object-cover"
+        loading="lazy"
+        onError={() => handleImageError(page.id)}
+      />
+    );
   };
 
   if (loading) {
@@ -163,18 +201,7 @@ export const MobileOptimizedPageGrid = ({
             >
               <div className="p-4">
                 <div className="aspect-[3/4] bg-gray-100 rounded-lg overflow-hidden mb-3 relative">
-                  {page.img_url ? (
-                    <img 
-                      src={page.img_url} 
-                      alt={`Page ${page.page_no}`}
-                      className="w-full h-full object-cover"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-400">
-                      Page {page.page_no}
-                    </div>
-                  )}
+                  <PageImage page={page} />
                   
                   {/* Selection overlay */}
                   {selectedPages.has(page.id) && (
@@ -182,6 +209,7 @@ export const MobileOptimizedPageGrid = ({
                   )}
                 </div>
                 
+                {/* Page metadata and controls */}
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
                     <Badge variant={selectedPages.has(page.id) ? "default" : "outline"}>
@@ -224,17 +252,7 @@ export const MobileOptimizedPageGrid = ({
           >
             <Card className="relative overflow-hidden">
               <div className="aspect-[3/4] bg-gray-100 relative">
-                {filteredPages[currentPage]?.img_url ? (
-                  <img 
-                    src={filteredPages[currentPage].img_url} 
-                    alt={`Page ${filteredPages[currentPage].page_no}`}
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-gray-400">
-                    Page {filteredPages[currentPage]?.page_no}
-                  </div>
-                )}
+                <PageImage page={filteredPages[currentPage]} />
 
                 {/* Navigation arrows */}
                 {currentPage > 0 && (

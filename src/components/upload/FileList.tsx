@@ -1,13 +1,15 @@
 
-import { FileText, CheckCircle, AlertCircle } from "lucide-react";
+import { FileText, CheckCircle, AlertCircle, RefreshCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 interface FileListProps {
   files: File[];
   uploadCompleted: boolean;
   uploadError: string | null;
+  onRetry?: () => void;
 }
 
-export const FileList = ({ files, uploadCompleted, uploadError }: FileListProps) => {
+export const FileList = ({ files, uploadCompleted, uploadError, onRetry }: FileListProps) => {
   if (files.length === 0) return null;
 
   return (
@@ -24,7 +26,19 @@ export const FileList = ({ files, uploadCompleted, uploadError }: FileListProps)
             <CheckCircle className="w-5 h-5 text-green-500" />
           )}
           {uploadError && (
-            <AlertCircle className="w-5 h-5 text-red-500" />
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-red-500" />
+              {onRetry && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRetry}
+                  className="h-6 px-2"
+                >
+                  <RefreshCcw className="w-3 h-3" />
+                </Button>
+              )}
+            </div>
           )}
         </div>
       ))}

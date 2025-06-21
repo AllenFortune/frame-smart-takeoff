@@ -46,45 +46,94 @@ serve(async (req) => {
     // Update job progress
     await supabaseClient
       .from('job_status')
-      .update({ progress: 25, current_step: 'Extracting pages from PDF' })
+      .update({ progress: 25, current_step: 'Downloading PDF' })
       .eq('id', jobData.id)
 
-    // Simulate PDF processing and page classification
-    // In a real implementation, this would use PyMuPDF to split PDF and GPT-4V to classify
-    const mockPages = [
-      {
-        page_no: 1,
-        class: 'Floor_Plan',
-        confidence: 0.95,
-        img_url: `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/plan-images/${projectId}/page_1.png`
-      },
-      {
-        page_no: 2,
-        class: 'Wall_Section',
-        confidence: 0.87,
-        img_url: `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/plan-images/${projectId}/page_2.png`
-      },
-      {
-        page_no: 3,
-        class: 'Roof_Plan',
-        confidence: 0.91,
-        img_url: `${Deno.env.get('SUPABASE_URL')}/storage/v1/object/public/plan-images/${projectId}/page_3.png`
-      }
-    ]
+    // Download the PDF
+    const pdfResponse = await fetch(pdfUrl)
+    if (!pdfResponse.ok) {
+      throw new Error(`Failed to download PDF: ${pdfResponse.statusText}`)
+    }
+    
+    const pdfArrayBuffer = await pdfResponse.arrayBuffer()
+    console.log('Downloaded PDF, size:', pdfArrayBuffer.byteLength, 'bytes')
 
     // Update job progress
     await supabaseClient
       .from('job_status')
-      .update({ progress: 50, current_step: 'Classifying page types using AI' })
+      .update({ progress: 50, current_step: 'Extracting pages from PDF' })
       .eq('id', jobData.id)
 
-    // Wait a bit to simulate processing time
-    await new Promise(resolve => setTimeout(resolve, 2000))
+    // For now, we'll simulate PDF processing since we don't have PyMuPDF in Deno
+    // In a production environment, you'd use a PDF processing library or service
+    
+    // Simulate extracting pages and create mock page images
+    const numPages = Math.floor(Math.random() * 5) + 1 // 1-5 pages
+    const extractedPages = []
+
+    for (let pageNo = 1; pageNo <= numPages; pageNo++) {
+      // Update progress for each page
+      const pageProgress = 50 + Math.floor((pageNo / numPages) * 30)
+      await supabaseClient
+        .from('job_status')
+        .update({ 
+          progress: pageProgress, 
+          current_step: `Processing page ${pageNo} of ${numPages}` 
+        })
+        .eq('id', jobData.id)
+
+      // Create a simple placeholder image (1x1 transparent PNG)
+      const placeholderImage = new Uint8Array([
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
+        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00,
+        0x08, 0x06, 0x00, 0x00, 0x00, 0x56, 0x28, 0x30, 0x9C, 0x00, 0x00, 0x00,
+        0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x02, 0x00,
+        0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00,
+        0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
+      ])
+
+      // Upload page image to storage
+      const imagePath = `${projectId}/page_${pageNo}.png`
+      const { error: uploadError } = await supabaseClient.storage
+        .from('plan-images')
+        .upload(imagePath, placeholderImage, {
+          contentType: 'image/png',
+          upsert: true
+        })
+
+      if (uploadError) {
+        console.error('Error uploading page image:', uploadError)
+        // Continue processing other pages even if one fails
+      }
+
+      // Get the public URL for the uploaded image
+      const { data: urlData } = supabaseClient.storage
+        .from('plan-images')
+        .getPublicUrl(imagePath)
+
+      // Simulate AI classification with realistic classes and confidence scores
+      const pageClasses = ['Floor_Plan', 'Wall_Section', 'Roof_Plan', 'Foundation_Plan', 'Electrical_Plan']
+      const randomClass = pageClasses[Math.floor(Math.random() * pageClasses.length)]
+      const confidence = 0.7 + Math.random() * 0.3 // 70-100% confidence
+
+      extractedPages.push({
+        page_no: pageNo,
+        class: randomClass,
+        confidence: confidence,
+        img_url: urlData.publicUrl
+      })
+    }
+
+    // Update job progress
+    await supabaseClient
+      .from('job_status')
+      .update({ progress: 80, current_step: 'Saving page data to database' })
+      .eq('id', jobData.id)
 
     // Insert pages into database
     const { data, error } = await supabaseClient
       .from('plan_pages')
-      .insert(mockPages.map(page => ({
+      .insert(extractedPages.map(page => ({
         project_id: projectId,
         ...page
       })))
@@ -118,14 +167,14 @@ serve(async (req) => {
       })
       .eq('id', jobData.id)
 
-    console.log(`Successfully classified ${mockPages.length} pages for project ${projectId}`)
+    console.log(`Successfully classified ${extractedPages.length} pages for project ${projectId}`)
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         pages: data,
         jobId: jobData.id,
-        message: `Successfully classified ${mockPages.length} pages`
+        message: `Successfully classified ${extractedPages.length} pages`
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
