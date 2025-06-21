@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -77,14 +76,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(session?.user ?? null);
         
         // Send welcome email for new signups
-        if (event === 'SIGNED_UP' && session?.user) {
-          const fullName = session.user.user_metadata?.full_name || '';
-          const email = session.user.email || '';
+        if (event === 'SIGNED_IN' && session?.user) {
+          // Check if this is a new user by looking at created_at timestamp
+          const userCreatedAt = new Date(session.user.created_at);
+          const now = new Date();
+          const timeDiff = now.getTime() - userCreatedAt.getTime();
           
-          // Send welcome email asynchronously without blocking
-          setTimeout(() => {
-            sendWelcomeEmail(session.user.id, email, fullName);
-          }, 1000); // Small delay to ensure user creation is complete
+          // If user was created within the last 30 seconds, treat as new signup
+          if (timeDiff < 30000) {
+            const fullName = session.user.user_metadata?.full_name || '';
+            const email = session.user.email || '';
+            
+            // Send welcome email asynchronously without blocking
+            setTimeout(() => {
+              sendWelcomeEmail(session.user.id, email, fullName);
+            }, 1000); // Small delay to ensure user creation is complete
+          }
         }
         
         if (session?.user) {
