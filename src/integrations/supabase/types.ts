@@ -9,7 +9,138 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      plan_overlays: {
+        Row: {
+          created_at: string
+          geojson: Json | null
+          id: string
+          overlay_url: string | null
+          page_id: string
+          step: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          geojson?: Json | null
+          id?: string
+          overlay_url?: string | null
+          page_id: string
+          step: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          geojson?: Json | null
+          id?: string
+          overlay_url?: string | null
+          page_id?: string
+          step?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_overlays_page_id_fkey"
+            columns: ["page_id"]
+            isOneToOne: false
+            referencedRelation: "plan_pages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_pages: {
+        Row: {
+          class: string
+          confidence: number
+          created_at: string
+          id: string
+          img_url: string | null
+          page_no: number
+          project_id: string
+        }
+        Insert: {
+          class: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          img_url?: string | null
+          page_no: number
+          project_id: string
+        }
+        Update: {
+          class?: string
+          confidence?: number
+          created_at?: string
+          id?: string
+          img_url?: string | null
+          page_no?: number
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_pages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      plan_summaries: {
+        Row: {
+          created_at: string
+          id: string
+          project_id: string
+          summary_json: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          project_id: string
+          summary_json?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          project_id?: string
+          summary_json?: Json
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_summaries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      projects: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          owner: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          owner: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          owner?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

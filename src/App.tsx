@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import ProjectUpload from "./pages/ProjectUpload";
+import ProjectPages from "./pages/ProjectPages";
 import ProjectPreflight from "./pages/ProjectPreflight";
 import ProjectSpecs from "./pages/ProjectSpecs";
 import ProjectWizard from "./pages/ProjectWizard";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/" element={<Dashboard />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/project/:id/upload" element={<ProjectUpload />} />
+            <Route path="/project/:id/pages" element={<ProjectPages />} />
             <Route path="/project/:id/preflight" element={<ProjectPreflight />} />
             <Route path="/project/:id/specs" element={<ProjectSpecs />} />
             <Route path="/project/:id/wizard" element={<ProjectWizard />} />
