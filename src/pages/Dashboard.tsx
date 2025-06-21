@@ -1,144 +1,59 @@
-import { useEffect, useState } from "react";
+
+import { useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderOpen, Calendar, DollarSign, AlertCircle } from "lucide-react";
+import { Plus, FolderOpen, Calendar, DollarSign, AlertCircle, RefreshCw } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
-
-interface Project {
-  id: string;
-  name: string;
-  owner: string;
-  created_at: string;
-  updated_at: string;
-}
+import { useProjects } from "@/hooks/useProjects";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  
+  // Memoize userId to prevent unnecessary re-renders
+  const userId = useMemo(() => user?.id, [user?.id]);
+  
+  const { 
+    projects, 
+    loading, 
+    error, 
+    fetchProjects, 
+    createProject, 
+    reset 
+  } = useProjects(userId);
 
   useEffect(() => {
-    if (user) {
-      console.log('Dashboard: User authenticated, fetching projects for user:', user.id);
+    if (userId) {
+      console.log('Dashboard: User authenticated, fetching projects for user:', userId);
       fetchProjects();
     } else {
       console.log('Dashboard: No user authenticated');
-      setLoading(false);
     }
-  }, [user]);
-
-  const fetchProjects = async () => {
-    try {
-      console.log('Dashboard: Starting to fetch projects...');
-      setError(null);
-      
-      // Test Supabase connection first
-      const { data: testData, error: testError } = await supabase
-        .from('projects')
-        .select('count', { count: 'exact', head: true });
-      
-      if (testError) {
-        console.error('Dashboard: Supabase connection test failed:', testError);
-        throw new Error(`Database connection failed: ${testError.message}`);
-      }
-      
-      console.log('Dashboard: Supabase connection successful');
-
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('owner', user?.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Dashboard: Error fetching projects:', error);
-        throw error;
-      }
-
-      console.log('Dashboard: Successfully fetched projects:', data?.length || 0);
-      setProjects(data || []);
-    } catch (error) {
-      console.error('Dashboard: Error in fetchProjects:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to load projects';
-      setError(errorMessage);
-      toast({
-        title: "Error loading projects",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [userId, fetchProjects]);
 
   const handleNewProject = async () => {
-    if (!user) {
+    if (!userId) {
       console.error('Dashboard: No user authenticated for project creation');
-      toast({
-        title: "Authentication required",
-        description: "Please log in to create a project",
-        variant: "destructive",
-      });
       return;
     }
     
-    console.log('Dashboard: Creating new project for user:', user.id);
-    setCreating(true);
+    console.log('Dashboard: Creating new project for user:', userId);
     
-    try {
-      const projectName = `New Project ${new Date().toLocaleDateString()}`;
-      console.log('Dashboard: Inserting project with name:', projectName);
-      
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          name: projectName,
-          owner: user.id
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Dashboard: Error creating project:', error);
-        throw error;
-      }
-
-      console.log('Dashboard: Project created successfully:', data);
-      
-      toast({
-        title: "Project created!",
-        description: "Your new project has been created successfully",
-      });
-
-      // Navigate to upload page
-      console.log('Dashboard: Navigating to upload page for project:', data.id);
-      navigate(`/project/${data.id}/upload`);
-    } catch (error) {
-      console.error('Dashboard: Error in handleNewProject:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to create project';
-      
-      toast({
-        title: "Failed to create project",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setCreating(false);
+    const projectName = `New Project ${new Date().toLocaleDateString()}`;
+    const newProject = await createProject(projectName);
+    
+    if (newProject) {
+      console.log('Dashboard: Navigating to upload page for project:', newProject.id);
+      navigate(`/project/${newProject.id}/upload`);
     }
   };
 
-  const retryFetch = () => {
-    console.log('Dashboard: Retrying to fetch projects...');
-    setLoading(true);
+  const handleRetry = () => {
+    console.log('Dashboard: Manual retry requested');
+    reset();
     fetchProjects();
   };
 
@@ -155,7 +70,7 @@ const Dashboard = () => {
     }
   };
 
-  if (loading) {
+  if (loading && projects.length === 0) {
     return (
       <div className="min-h-screen bg-background">
         <AppNavbar />
@@ -166,7 +81,7 @@ const Dashboard = () => {
     );
   }
 
-  if (error) {
+  if (error && projects.length === 0) {
     return (
       <div className="min-h-screen bg-background">
         <AppNavbar />
@@ -179,7 +94,8 @@ const Dashboard = () => {
                 {error}
               </p>
             </div>
-            <Button onClick={retryFetch} variant="outline">
+            <Button onClick={handleRetry} variant="outline">
+              <RefreshCw className="w-4 h-4 mr-2" />
               Try Again
             </Button>
           </div>
@@ -203,9 +119,9 @@ const Dashboard = () => {
             onClick={handleNewProject}
             className="rounded-full bg-primary hover:bg-primary/90"
             size="lg"
-            disabled={creating}
+            disabled={loading}
           >
-            {creating ? (
+            {loading ? (
               <>
                 <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 Creating...
@@ -218,6 +134,20 @@ const Dashboard = () => {
             )}
           </Button>
         </div>
+
+        {error && projects.length > 0 && (
+          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-destructive">
+                Connection issues detected. Showing cached projects.
+              </p>
+              <Button onClick={handleRetry} variant="outline" size="sm">
+                <RefreshCw className="w-4 h-4 mr-1" />
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
@@ -264,9 +194,9 @@ const Dashboard = () => {
             <Button
               onClick={handleNewProject}
               className="rounded-full bg-primary hover:bg-primary/90"
-              disabled={creating}
+              disabled={loading}
             >
-              {creating ? (
+              {loading ? (
                 <>
                   <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
                   Creating...

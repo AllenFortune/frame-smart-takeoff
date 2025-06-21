@@ -14,9 +14,6 @@ if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
 
 console.log('Supabase client initializing with URL:', SUPABASE_URL);
 
-// Import the supabase client like this:
-// import { supabase } from "@/integrations/supabase/client";
-
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
     persistSession: true,
@@ -28,24 +25,3 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     }
   }
 });
-
-// Add connection health check
-supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Supabase auth state changed:', event, session?.user?.id || 'no user');
-});
-
-// Test connection on initialization
-const testConnection = async () => {
-  try {
-    const { data, error } = await supabase.auth.getSession();
-    if (error) {
-      console.error('Supabase connection test failed:', error);
-    } else {
-      console.log('Supabase connection test successful');
-    }
-  } catch (error) {
-    console.error('Supabase connection error:', error);
-  }
-};
-
-testConnection();

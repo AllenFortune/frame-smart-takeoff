@@ -2,6 +2,7 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useRetryableRequest } from './useRetryableRequest';
 
 export interface Project {
   id: string;
@@ -13,44 +14,45 @@ export interface Project {
 
 export const useProjects = (userId?: string) => {
   const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  
+  const { executeRequest, isLoading, error, reset } = useRetryableRequest({
+    maxRetries: 3,
+    baseDelay: 1000,
+    circuitBreakerThreshold: 3,
+    circuitBreakerTimeout: 15000,
+  });
 
   const fetchProjects = useCallback(async () => {
     if (!userId) return;
     
     console.log('useProjects: Fetching projects for user:', userId);
-    setLoading(true);
-    setError(null);
 
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .select('*')
-        .eq('owner', userId)
-        .order('created_at', { ascending: false });
+    await executeRequest(
+      async () => {
+        const { data, error } = await supabase
+          .from('projects')
+          .select('*')
+          .eq('owner', userId)
+          .order('created_at', { ascending: false });
 
-      if (error) {
-        console.error('useProjects: Error fetching projects:', error);
-        throw error;
+        if (error) throw error;
+        return data || [];
+      },
+      (data) => {
+        console.log('useProjects: Successfully fetched', data.length, 'projects');
+        setProjects(data);
+      },
+      (errorMessage) => {
+        console.error('useProjects: Fetch error:', errorMessage);
+        toast({
+          title: "Error loading projects",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
-
-      console.log('useProjects: Successfully fetched', data?.length || 0, 'projects');
-      setProjects(data || []);
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch projects';
-      console.error('useProjects: Fetch error:', errorMessage);
-      setError(errorMessage);
-      toast({
-        title: "Error loading projects",
-        description: errorMessage,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [userId, toast]);
+    );
+  }, [userId, executeRequest, toast]);
 
   const createProject = useCallback(async (name: string) => {
     if (!userId) {
@@ -66,50 +68,46 @@ export const useProjects = (userId?: string) => {
 
     console.log('useProjects: Creating project with name:', name);
     
-    try {
-      const { data, error } = await supabase
-        .from('projects')
-        .insert({
-          name,
-          owner: userId
-        })
-        .select()
-        .single();
+    return await executeRequest(
+      async () => {
+        const { data, error } = await supabase
+          .from('projects')
+          .insert({
+            name,
+            owner: userId
+          })
+          .select()
+          .single();
 
-      if (error) {
-        console.error('useProjects: Error creating project:', error);
-        throw error;
+        if (error) throw error;
+        return data;
+      },
+      (data) => {
+        console.log('useProjects: Project created successfully:', data);
+        setProjects(prev => [data, ...prev]);
+        toast({
+          title: "Project created!",
+          description: "Your new project has been created successfully",
+        });
+      },
+      (errorMessage) => {
+        console.error('useProjects: Create error:', errorMessage);
+        toast({
+          title: "Failed to create project",
+          description: errorMessage,
+          variant: "destructive",
+        });
       }
-
-      console.log('useProjects: Project created successfully:', data);
-      
-      // Add the new project to the local state
-      setProjects(prev => [data, ...prev]);
-      
-      toast({
-        title: "Project created!",
-        description: "Your new project has been created successfully",
-      });
-
-      return data;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create project';
-      console.error('useProjects: Create error:', errorMessage);
-      toast({
-        title: "Failed to create project",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      return null;
-    }
-  }, [userId, toast]);
+    );
+  }, [userId, executeRequest, toast]);
 
   return {
     projects,
-    loading,
+    loading: isLoading,
     error,
     fetchProjects,
     createProject,
-    refetch: fetchProjects
+    refetch: fetchProjects,
+    reset
   };
 };
