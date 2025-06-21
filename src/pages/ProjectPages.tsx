@@ -18,7 +18,7 @@ const ProjectPages = () => {
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
   
   const { pages, loading } = useProjectData(id!);
-  const { currentJob, cancelJob } = useJobPolling({ 
+  const { currentJob, cancelJob, createJob } = useJobPolling({ 
     projectId: id,
     jobType: 'extract_summary'
   });
@@ -44,6 +44,13 @@ const ProjectPages = () => {
     if (!id) return;
 
     try {
+      // Create a job in the database first
+      const job = await createJob(id, 'extract_summary', 5);
+      if (!job) {
+        throw new Error('Failed to create job');
+      }
+
+      // Start the edge function
       await extractSummary(id, selectedPageIds);
 
       toast({
@@ -80,7 +87,7 @@ const ProjectPages = () => {
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
-      <main className="pb-20 sm:pb-8"> {/* Extra padding for mobile bottom nav */}
+      <main className="pb-20 sm:pb-8">
         {/* Progress Indicator */}
         {currentJob && (
           <div className="container mx-auto px-4 pt-4">

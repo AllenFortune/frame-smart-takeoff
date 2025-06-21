@@ -9,6 +9,51 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      job_status: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          current_step: string | null
+          error_message: string | null
+          id: string
+          job_type: string
+          progress: number | null
+          project_id: string
+          result_data: Json | null
+          status: string
+          total_steps: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          current_step?: string | null
+          error_message?: string | null
+          id?: string
+          job_type: string
+          progress?: number | null
+          project_id: string
+          result_data?: Json | null
+          status?: string
+          total_steps?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          current_step?: string | null
+          error_message?: string | null
+          id?: string
+          job_type?: string
+          progress?: number | null
+          project_id?: string
+          result_data?: Json | null
+          status?: string
+          total_steps?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       plan_overlays: {
         Row: {
           created_at: string
