@@ -7,6 +7,16 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Validate environment variables
+const requiredEnvVars = ['SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY'];
+for (const envVar of requiredEnvVars) {
+  if (!Deno.env.get(envVar)) {
+    throw new Error(`Missing required environment variable: ${envVar}`);
+  }
+}
+
+const SIGNED_URL_TTL_SECONDS = parseInt(Deno.env.get('SIGNED_URL_TTL_SECONDS') || '3600');
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -38,7 +48,17 @@ serve(async (req) => {
 
     if (jobError) {
       console.error('Error creating job:', jobError)
-      throw new Error(`Failed to create job: ${jobError.message}`)
+      return new Response(
+        JSON.stringify({ 
+          error_code: 'job_creation_failed',
+          message: `Failed to create job: ${jobError.message}`,
+          hint: 'Check database permissions and job_status table'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
     }
 
     console.log('Created job:', jobData.id)
@@ -51,13 +71,62 @@ serve(async (req) => {
 
     // Download the PDF
     console.log('Downloading PDF from:', pdfUrl)
-    const pdfResponse = await fetch(pdfUrl)
-    if (!pdfResponse.ok) {
-      throw new Error(`Failed to download PDF: ${pdfResponse.statusText}`)
+    let pdfResponse;
+    try {
+      pdfResponse = await fetch(pdfUrl);
+      if (!pdfResponse.ok) {
+        throw new Error(`HTTP ${pdfResponse.status}: ${pdfResponse.statusText}`);
+      }
+    } catch (error) {
+      await supabaseClient
+        .from('job_status')
+        .update({ 
+          status: 'failed', 
+          error_message: `Failed to download PDF: ${error.message}`,
+          progress: 0
+        })
+        .eq('id', jobData.id)
+      
+      return new Response(
+        JSON.stringify({ 
+          error_code: 'pdf_download_failed',
+          message: 'Failed to download PDF from provided URL',
+          hint: 'Check if the PDF URL is accessible and not expired'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
     }
     
     const pdfArrayBuffer = await pdfResponse.arrayBuffer()
     console.log('Downloaded PDF, size:', pdfArrayBuffer.byteLength, 'bytes')
+
+    // Check PDF size limit (50MB as per error handling guidelines)
+    const maxPdfSize = 50 * 1024 * 1024; // 50MB
+    if (pdfArrayBuffer.byteLength > maxPdfSize) {
+      await supabaseClient
+        .from('job_status')
+        .update({ 
+          status: 'failed', 
+          error_message: 'PDF file exceeds 50MB size limit',
+          progress: 0
+        })
+        .eq('id', jobData.id)
+      
+      return new Response(
+        JSON.stringify({ 
+          error_code: 'pdf_too_large',
+          message: 'File exceeds 50 MB.',
+          hint: 'Please split the plan into smaller files'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
+    }
 
     // Update job progress
     await supabaseClient
@@ -99,14 +168,6 @@ serve(async (req) => {
 
       console.log(`Processing page ${pageNo}/${numPages}`)
 
-      // Create a single-page PDF for this page
-      const singlePageDoc = await PDFDocument.create()
-      const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNo - 1])
-      singlePageDoc.addPage(copiedPage)
-      
-      // Convert to bytes
-      const pdfBytes = await singlePageDoc.save()
-      
       // Create a better placeholder - a simple 800x1000 white PNG with page number
       const createPlaceholderImage = (pageNumber: number) => {
         // Create a simple SVG that we'll convert to PNG-like data
@@ -126,32 +187,49 @@ serve(async (req) => {
       const imagePath = `${projectId}/page_${pageNo}.png`
       console.log(`Uploading page ${pageNo} to storage path:`, imagePath)
       
-      const { error: uploadError } = await supabaseClient.storage
-        .from('plan-images')
-        .upload(imagePath, placeholderImage, {
-          contentType: 'image/svg+xml',
-          upsert: true
-        })
+      let uploadError = null;
+      try {
+        const { error } = await supabaseClient.storage
+          .from('plan-images')
+          .upload(imagePath, placeholderImage, {
+            contentType: 'image/svg+xml',
+            upsert: true
+          })
+        uploadError = error;
+      } catch (error) {
+        uploadError = error;
+      }
 
       if (uploadError) {
         console.error(`Error uploading page ${pageNo} image:`, uploadError)
-        // Continue processing other pages even if one fails
+        // Mark this page as upload_failed and continue
+        extractedPages.push({
+          page_no: pageNo,
+          class: 'upload_failed',
+          confidence: 0,
+          img_url: null
+        })
+        continue;
       } else {
         console.log(`Successfully uploaded page ${pageNo}`)
       }
 
-      // Create signed URL with proper 24-hour TTL
-      const { data: signedData, error: signError } = await supabaseClient.storage
-        .from('plan-images')
-        .createSignedUrl(imagePath, 24 * 60 * 60) // 24 hours in seconds
+      // Create signed URL with proper TTL
+      let signedUrl = null;
+      try {
+        const { data: signedData, error: signError } = await supabaseClient.storage
+          .from('plan-images')
+          .createSignedUrl(imagePath, SIGNED_URL_TTL_SECONDS)
 
-      if (signError) {
-        console.error(`Error creating signed URL for page ${pageNo}:`, signError)
-        // Continue with null URL rather than failing completely
+        if (signError) {
+          console.error(`Error creating signed URL for page ${pageNo}:`, signError)
+        } else {
+          signedUrl = signedData?.signedUrl;
+          console.log(`Created signed URL for page ${pageNo} with TTL ${SIGNED_URL_TTL_SECONDS}s`)
+        }
+      } catch (error) {
+        console.error(`Failed to create signed URL for page ${pageNo}:`, error)
       }
-
-      const signedUrl = signedData?.signedUrl || null;
-      console.log(`Created signed URL for page ${pageNo}:`, signedUrl ? 'Success' : 'Failed')
 
       // Simulate AI classification with realistic classes and confidence scores
       const pageClasses = ['floor_plan', 'wall_section', 'roof_plan', 'foundation_plan', 'electrical_plan', 'structural_plan', 'site_plan']
@@ -196,10 +274,23 @@ serve(async (req) => {
         })
         .eq('id', jobData.id)
       
-      throw error
+      return new Response(
+        JSON.stringify({ 
+          error_code: 'database_insert_failed',
+          message: 'Failed to save page data to database',
+          hint: 'Check database permissions and table schema'
+        }),
+        { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
+        },
+      )
     }
 
     console.log(`Successfully inserted ${data.length} pages`)
+
+    // Count failed uploads for user notification
+    const failedUploads = extractedPages.filter(p => p.class === 'upload_failed').length;
 
     // Update job to completed
     await supabaseClient
@@ -212,10 +303,15 @@ serve(async (req) => {
         result_data: { 
           pages_created: data.length,
           project_id: projectId,
-          total_pages: numPages
+          total_pages: numPages,
+          failed_uploads: failedUploads
         }
       })
       .eq('id', jobData.id)
+
+    const responseMessage = failedUploads > 0 
+      ? `Successfully classified ${extractedPages.length - failedUploads} pages. ${failedUploads} page(s) failed to upload.`
+      : `Successfully classified ${extractedPages.length} pages`;
 
     console.log(`Successfully classified ${extractedPages.length} pages for project ${projectId}`)
 
@@ -224,7 +320,8 @@ serve(async (req) => {
         success: true, 
         pages: data,
         jobId: jobData.id,
-        message: `Successfully classified ${extractedPages.length} pages`
+        message: responseMessage,
+        failedUploads: failedUploads
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -236,12 +333,13 @@ serve(async (req) => {
     console.error('Error in classify-pages:', error)
     return new Response(
       JSON.stringify({ 
-        error: error.message,
-        details: 'Check edge function logs for more details'
+        error_code: 'internal_error',
+        message: 'An unexpected error occurred during PDF processing',
+        hint: 'Check edge function logs for more details'
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
+        status: 500,
       },
     )
   }

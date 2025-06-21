@@ -11,7 +11,9 @@ interface WizardCanvasProps {
 }
 
 export const WizardCanvas = ({ currentPage, currentOverlay }: WizardCanvasProps) => {
-  const hasValidImage = currentPage?.img_url && !isSignedUrlExpired(currentPage.img_url);
+  const hasValidImage = currentPage?.img_url && 
+    !isSignedUrlExpired(currentPage.img_url) && 
+    currentPage.class !== 'upload_failed';
   
   return (
     <Card className="rounded-2xl shadow-lg">
@@ -31,9 +33,16 @@ export const WizardCanvas = ({ currentPage, currentOverlay }: WizardCanvasProps)
                   <FileText className="w-8 h-8 text-muted-foreground" />
                 </div>
                 <div>
-                  <p className="font-medium">Image Not Available</p>
+                  <p className="font-medium">
+                    {currentPage.class === 'upload_failed' ? 'Upload Failed' : 'Image Not Available'}
+                  </p>
                   <p className="text-sm">Page {currentPage.page_no} - {currentPage.class}</p>
-                  <p className="text-xs mt-2">The image URL may have expired or the file is not accessible</p>
+                  <p className="text-xs mt-2">
+                    {currentPage.class === 'upload_failed' 
+                      ? 'This page failed to upload during processing'
+                      : 'The image URL may have expired or the file is not accessible'
+                    }
+                  </p>
                 </div>
               </div>
             </div>

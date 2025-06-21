@@ -3,7 +3,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
 import { AlertCircle, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { refreshSignedUrl, isSignedUrlExpired, checkImageHealth, retryWithExponentialBackoff } from '@/lib/storage';
+import { refreshSignedUrl, isSignedUrlExpired, checkImageHealth, retryWithExponentialBackoff, ensureSignedUrl } from '@/lib/storage';
 
 interface PlanPage {
   id: string;
@@ -37,47 +37,25 @@ export const PageImage = ({
   const hasError = imageErrors.has(page.id);
   const maxRetries = 3;
 
-  // Validate if URL looks like a proper image URL
-  const isValidImageUrl = useCallback((url: string | null): boolean => {
-    if (!url) return false;
-    
-    // Check if it's a Supabase URL with proper format
-    const isSupabaseUrl = url.includes('supabase') || url.includes('localhost');
-    const hasImageExtension = /\.(png|jpg|jpeg|gif|svg|webp)(\?|$)/i.test(url);
-    const hasToken = url.includes('token=');
-    
-    return isSupabaseUrl && (hasImageExtension || hasToken);
-  }, []);
+  // Check if this is an upload failed page
+  const isUploadFailed = page.class === 'upload_failed';
 
-  // Check URL health and refresh if needed
+  // Auto-refresh expired URLs on component mount
   useEffect(() => {
-    const checkAndRefreshUrl = async () => {
-      if (!currentUrl || !projectId) return;
+    const initializeUrl = async () => {
+      if (!currentUrl || !projectId || isUploadFailed) return;
       
-      console.log(`Checking URL health for page ${page.page_no}:`, currentUrl);
-      
-      // Check if URL is expired
       if (isSignedUrlExpired(currentUrl)) {
-        console.log(`URL expired for page ${page.page_no}, refreshing...`);
-        await handleUrlRefresh();
-        return;
-      }
-      
-      // Check if URL is accessible
-      const isHealthy = await checkImageHealth(currentUrl);
-      if (!isHealthy && retryCount < maxRetries) {
-        console.log(`URL not healthy for page ${page.page_no}, attempting refresh...`);
+        console.log(`URL expired for page ${page.page_no}, refreshing on mount...`);
         await handleUrlRefresh();
       }
     };
     
-    if (currentUrl && !hasError) {
-      checkAndRefreshUrl();
-    }
-  }, [currentUrl, projectId, page.page_no, hasError, retryCount]);
+    initializeUrl();
+  }, []);
 
   const handleUrlRefresh = async () => {
-    if (!projectId || isRefreshing) return;
+    if (!projectId || isRefreshing || isUploadFailed) return;
     
     setIsRefreshing(true);
     
@@ -129,32 +107,44 @@ export const PageImage = ({
     setImageLoading(false);
     
     // If we haven't hit max retries, try to refresh the URL
-    if (retryCount < maxRetries && projectId && !isRefreshing) {
+    if (retryCount < maxRetries && projectId && !isRefreshing && !isUploadFailed) {
       console.log(`Attempting URL refresh for page ${page.page_no} (attempt ${retryCount + 1})`);
       await handleUrlRefresh();
     } else {
       // Mark as error if we've exhausted retries
       onImageError(page.id);
     }
-  }, [currentUrl, page.page_no, page.id, retryCount, projectId, isRefreshing, onImageError]);
+  }, [currentUrl, page.page_no, page.id, retryCount, projectId, isRefreshing, onImageError, isUploadFailed]);
 
   const handleManualRetry = () => {
     console.log(`Manual retry requested for page ${page.page_no}`);
     setRetryCount(0);
     onRetryImage(page.id);
     
-    if (projectId) {
+    if (projectId && !isUploadFailed) {
       handleUrlRefresh();
     }
   };
 
-  // Show placeholder if no URL, invalid URL, has error, or exceeded retries
-  if (!currentUrl || !isValidImageUrl(currentUrl) || (hasError && retryCount >= maxRetries)) {
+  // Show placeholder for upload failed pages
+  if (isUploadFailed) {
     return (
       <PlaceholderImage
         pageNo={page.page_no}
         className="w-full h-full"
-        error={hasError || !isValidImageUrl(currentUrl)}
+        error={true}
+        onRetry={handleManualRetry}
+      />
+    );
+  }
+
+  // Show placeholder if no URL, has error, or exceeded retries
+  if (!currentUrl || (hasError && retryCount >= maxRetries)) {
+    return (
+      <PlaceholderImage
+        pageNo={page.page_no}
+        className="w-full h-full"
+        error={hasError}
         onRetry={handleManualRetry}
       />
     );

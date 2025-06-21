@@ -1,21 +1,24 @@
 
 import { supabase } from '@/integrations/supabase/client';
 
-const SIGNED_URL_TTL = 24 * 60 * 60; // 24 hours in seconds
+// Default TTL of 1 hour (3600 seconds) - can be overridden by env var
+const DEFAULT_SIGNED_URL_TTL = 3600;
 
-export async function ensureSignedUrl(path: string): Promise<string> {
+export async function ensureSignedUrl(path: string, ttlSeconds?: number): Promise<string> {
   console.log('Creating signed URL for path:', path);
+  
+  const ttl = ttlSeconds || DEFAULT_SIGNED_URL_TTL;
   
   const { data, error } = await supabase.storage
     .from('plan-images')
-    .createSignedUrl(path, SIGNED_URL_TTL);
+    .createSignedUrl(path, ttl);
     
   if (error) {
     console.error('Error creating signed URL:', error);
     throw error;
   }
   
-  console.log('Successfully created signed URL');
+  console.log('Successfully created signed URL with TTL:', ttl);
   return data.signedUrl;
 }
 
@@ -45,9 +48,9 @@ export function isSignedUrlExpired(url: string): boolean {
     
     if (!exp) return true;
     
-    // Check if token is expired (with 1 hour buffer)
+    // Check if token is expired (with 5 minute buffer for safety)
     const now = Math.floor(Date.now() / 1000);
-    const isExpired = exp <= (now + 3600); // 1 hour buffer
+    const isExpired = exp <= (now + 300); // 5 minute buffer
     
     console.log(`URL expiration check: exp=${exp}, now=${now}, expired=${isExpired}`);
     return isExpired;
