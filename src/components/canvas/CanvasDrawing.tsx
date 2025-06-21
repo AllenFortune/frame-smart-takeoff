@@ -3,7 +3,7 @@ import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 import { GeoJsonData, Tool } from './types';
 
 interface CanvasDrawingProps {
-  imageRef: React.RefObject<HTMLImageImage>;
+  imageRef: React.RefObject<HTMLImageElement>;
   geojson?: GeoJsonData;
   selectedFeature: string | null;
   activeTool: Tool;
