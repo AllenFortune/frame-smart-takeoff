@@ -1,5 +1,7 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { refreshSignedUrl, isSignedUrlExpired } from '@/lib/storage';
 
 export interface Project {
   id: string;
@@ -101,10 +103,28 @@ export const useProjectData = (projectId: string) => {
         }, []).sort((a, b) => a.page_no - b.page_no) : [];
 
       console.log(`Fetched ${pagesData?.length || 0} total page entries, deduped to ${uniquePages.length} unique pages`);
-      setPages(uniquePages);
+
+      // Refresh expired signed URLs
+      const pagesWithFreshUrls = await Promise.all(
+        uniquePages.map(async (page) => {
+          if (page.img_url && isSignedUrlExpired(page.img_url)) {
+            console.log(`Refreshing expired URL for page ${page.page_no}`);
+            try {
+              const freshUrl = await refreshSignedUrl(projectId, page.page_no);
+              return { ...page, img_url: freshUrl };
+            } catch (error) {
+              console.error(`Failed to refresh URL for page ${page.page_no}:`, error);
+              return page;
+            }
+          }
+          return page;
+        })
+      );
+
+      setPages(pagesWithFreshUrls);
 
       // Debug: Log image URLs to check their format
-      uniquePages.forEach(page => {
+      pagesWithFreshUrls.forEach(page => {
         if (page.img_url) {
           console.log(`Page ${page.page_no} image URL: ${page.img_url}`);
         } else {
@@ -133,8 +153,8 @@ export const useProjectData = (projectId: string) => {
       }
 
       // Fetch overlays
-      if (uniquePages?.length) {
-        const pageIds = uniquePages.map(p => p.id);
+      if (pagesWithFreshUrls?.length) {
+        const pageIds = pagesWithFreshUrls.map(p => p.id);
         const { data: overlaysData, error: overlaysError } = await supabase
           .from('plan_overlays')
           .select('*')

@@ -92,28 +92,18 @@ serve(async (req) => {
       // Convert to bytes
       const pdfBytes = await singlePageDoc.save()
       
-      // For now, we'll create a simple placeholder image since we don't have image conversion
-      // In production, you'd use a service like Puppeteer or similar to convert PDF page to image
-      const placeholderSvg = `
-        <svg width="600" height="800" xmlns="http://www.w3.org/2000/svg">
-          <rect width="100%" height="100%" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
-          <text x="50%" y="50%" text-anchor="middle" font-family="Arial" font-size="24" fill="#6c757d">
-            Page ${pageNo}
-          </text>
-          <text x="50%" y="60%" text-anchor="middle" font-family="Arial" font-size="16" fill="#6c757d">
-            PDF Content
-          </text>
-        </svg>
-      `
-      
-      const svgBytes = new TextEncoder().encode(placeholderSvg)
+      // Create a valid 1×1 transparent PNG placeholder
+      const placeholderBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wIAAgMBApU3G0sAAAAASUVORK5CYII="
+      const placeholderImage = Uint8Array.from(
+        atob(placeholderBase64), c => c.charCodeAt(0)
+      )
 
       // Upload page image to storage
-      const imagePath = `${projectId}/page_${pageNo}.svg`
+      const imagePath = `${projectId}/page_${pageNo}.png`
       const { error: uploadError } = await supabaseClient.storage
         .from('plan-images')
-        .upload(imagePath, svgBytes, {
-          contentType: 'image/svg+xml',
+        .upload(imagePath, placeholderImage, {
+          contentType: 'image/png',
           upsert: true
         })
 
@@ -122,10 +112,15 @@ serve(async (req) => {
         // Continue processing other pages even if one fails
       }
 
-      // Get the public URL for the uploaded image
-      const { data: urlData } = supabaseClient.storage
+      // Create signed URL with 24-hour TTL instead of public URL
+      const { data: signedData, error: signError } = await supabaseClient.storage
         .from('plan-images')
-        .getPublicUrl(imagePath)
+        .createSignedUrl(imagePath, 60 * 60 * 24) // 24 hours
+
+      if (signError) {
+        console.error('Error creating signed URL:', signError)
+        throw signError
+      }
 
       // Simulate AI classification with realistic classes and confidence scores
       const pageClasses = ['floor_plan', 'wall_section', 'roof_plan', 'foundation_plan', 'electrical_plan']
@@ -136,7 +131,7 @@ serve(async (req) => {
         page_no: pageNo,
         class: randomClass,
         confidence: confidence,
-        img_url: urlData.publicUrl
+        img_url: signedData.signedUrl // Store signed URL instead of public URL
       })
     }
 

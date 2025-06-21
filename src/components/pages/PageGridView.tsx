@@ -21,6 +21,7 @@ interface PageGridViewProps {
   onImageError: (pageId: string) => void;
   onRetryImage: (pageId: string) => void;
   onDoubleTap: (pageId: string) => void;
+  projectId?: string;
 }
 
 export const PageGridView = ({
@@ -30,7 +31,8 @@ export const PageGridView = ({
   onPageToggle,
   onImageError,
   onRetryImage,
-  onDoubleTap
+  onDoubleTap,
+  projectId
 }: PageGridViewProps) => {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4">
@@ -47,6 +49,7 @@ export const PageGridView = ({
                 imageErrors={imageErrors}
                 onImageError={onImageError}
                 onRetryImage={onRetryImage}
+                projectId={projectId}
               />
               
               {/* Selection overlay */}

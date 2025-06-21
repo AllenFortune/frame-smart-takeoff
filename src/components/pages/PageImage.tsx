@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
 import { AlertCircle } from 'lucide-react';
+import { refreshSignedUrl } from '@/lib/storage';
 
 interface PlanPage {
   id: string;
@@ -9,6 +10,7 @@ interface PlanPage {
   class: string;
   confidence: number;
   img_url: string | null;
+  project_id?: string;
 }
 
 interface PageImageProps {
@@ -16,37 +18,53 @@ interface PageImageProps {
   imageErrors: Set<string>;
   onImageError: (pageId: string) => void;
   onRetryImage: (pageId: string) => void;
+  projectId?: string;
 }
 
 export const PageImage = ({ 
   page, 
   imageErrors, 
   onImageError, 
-  onRetryImage 
+  onRetryImage,
+  projectId 
 }: PageImageProps) => {
   const [imageLoading, setImageLoading] = useState(true);
+  const [currentUrl, setCurrentUrl] = useState(page.img_url);
   const hasError = imageErrors.has(page.id);
 
   // Check if the image URL looks valid
-  const isValidImageUrl = page.img_url && 
-    (page.img_url.includes('supabase') || page.img_url.startsWith('http'));
+  const isValidImageUrl = currentUrl && 
+    (currentUrl.includes('supabase') || currentUrl.startsWith('http'));
 
   const handleImageLoad = () => {
-    console.log(`Image loaded successfully for page ${page.page_no}: ${page.img_url}`);
+    console.log(`Image loaded successfully for page ${page.page_no}: ${currentUrl}`);
     setImageLoading(false);
   };
 
-  const handleImageError = (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
     console.error(`Image failed to load for page ${page.page_no}:`, {
-      url: page.img_url,
+      url: currentUrl,
       error: e,
       naturalWidth: (e.target as HTMLImageElement).naturalWidth,
       naturalHeight: (e.target as HTMLImageElement).naturalHeight
     });
     
+    // Try to refresh the signed URL if we have a project ID
+    if (projectId && currentUrl) {
+      try {
+        console.log(`Attempting to refresh signed URL for page ${page.page_no}`);
+        const freshUrl = await refreshSignedUrl(projectId, page.page_no);
+        setCurrentUrl(freshUrl);
+        console.log(`Refreshed URL for page ${page.page_no}: ${freshUrl}`);
+        return; // Don't set error state, let it retry with the new URL
+      } catch (refreshError) {
+        console.error(`Failed to refresh URL for page ${page.page_no}:`, refreshError);
+      }
+    }
+    
     // Try to access the image directly to get more info
-    if (page.img_url) {
-      fetch(page.img_url, { method: 'HEAD' })
+    if (currentUrl) {
+      fetch(currentUrl, { method: 'HEAD' })
         .then(response => {
           console.log(`HEAD request for page ${page.page_no} image:`, {
             status: response.status,
@@ -65,12 +83,12 @@ export const PageImage = ({
   };
 
   // Show placeholder if no URL, invalid URL, or has error
-  if (!page.img_url || !isValidImageUrl || hasError) {
+  if (!currentUrl || !isValidImageUrl || hasError) {
     return (
       <PlaceholderImage
         pageNo={page.page_no}
         className="w-full h-full"
-        error={hasError || (!page.img_url || !isValidImageUrl)}
+        error={hasError || (!currentUrl || !isValidImageUrl)}
         onRetry={() => onRetryImage(page.id)}
       />
     );
@@ -84,7 +102,7 @@ export const PageImage = ({
         </div>
       )}
       <img 
-        src={page.img_url} 
+        src={currentUrl} 
         alt={`Page ${page.page_no}`}
         className="w-full h-full object-cover"
         loading="lazy"

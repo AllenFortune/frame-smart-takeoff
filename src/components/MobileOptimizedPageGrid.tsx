@@ -147,6 +147,7 @@ export const MobileOptimizedPageGrid = ({
           onImageError={handleImageError}
           onRetryImage={retryImage}
           onDoubleTap={handleDoubleTap}
+          projectId={projectId}
         />
       )}
 
@@ -164,6 +165,7 @@ export const MobileOptimizedPageGrid = ({
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          projectId={projectId}
         />
       )}
 

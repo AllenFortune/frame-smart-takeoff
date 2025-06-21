@@ -27,6 +27,7 @@ interface PageCarouselViewProps {
   onTouchStart: (e: React.TouchEvent) => void;
   onTouchMove: (e: React.TouchEvent) => void;
   onTouchEnd: () => void;
+  projectId?: string;
 }
 
 export const PageCarouselView = ({
@@ -40,7 +41,8 @@ export const PageCarouselView = ({
   onRetryImage,
   onTouchStart,
   onTouchMove,
-  onTouchEnd
+  onTouchEnd,
+  projectId
 }: PageCarouselViewProps) => {
   if (pages.length === 0) return null;
 
@@ -61,6 +63,7 @@ export const PageCarouselView = ({
               imageErrors={imageErrors}
               onImageError={onImageError}
               onRetryImage={onRetryImage}
+              projectId={projectId}
             />
 
             {/* Navigation arrows */}
