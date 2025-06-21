@@ -39,6 +39,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Function to send welcome email
+  const sendWelcomeEmail = async (userId: string, email: string, fullName: string) => {
+    try {
+      console.log('Sending welcome email to:', email);
+      const { error } = await supabase.functions.invoke('send-welcome-email', {
+        body: {
+          user_id: userId,
+          email: email,
+          full_name: fullName
+        }
+      });
+
+      if (error) {
+        console.error('Error sending welcome email:', error);
+        // Don't throw error - email failure shouldn't affect user experience
+      } else {
+        console.log('Welcome email sent successfully');
+      }
+    } catch (error) {
+      console.error('Failed to send welcome email:', error);
+      // Don't throw error - email failure shouldn't affect user experience
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
@@ -51,6 +75,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         setSession(session);
         setUser(session?.user ?? null);
+        
+        // Send welcome email for new signups
+        if (event === 'SIGNED_UP' && session?.user) {
+          const fullName = session.user.user_metadata?.full_name || '';
+          const email = session.user.email || '';
+          
+          // Send welcome email asynchronously without blocking
+          setTimeout(() => {
+            sendWelcomeEmail(session.user.id, email, fullName);
+          }, 1000); // Small delay to ensure user creation is complete
+        }
         
         if (session?.user) {
           // Use setTimeout to avoid the auth state change callback deadlock
