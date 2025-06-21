@@ -83,7 +83,7 @@ export const useProjectData = (projectId: string) => {
       if (pagesError) throw pagesError;
       setPages(pagesData || []);
 
-      // Fetch summary
+      // Fetch summary with proper type handling
       const { data: summaryData, error: summaryError } = await supabase
         .from('plan_summaries')
         .select('*')
@@ -91,7 +91,17 @@ export const useProjectData = (projectId: string) => {
         .maybeSingle();
 
       if (summaryError) throw summaryError;
-      setSummary(summaryData);
+      
+      // Transform the summary data to match our interface
+      if (summaryData) {
+        const transformedSummary: PlanSummary = {
+          ...summaryData,
+          summary_json: typeof summaryData.summary_json === 'object' && summaryData.summary_json !== null
+            ? summaryData.summary_json as PlanSummary['summary_json']
+            : {}
+        };
+        setSummary(transformedSummary);
+      }
 
       // Fetch overlays
       if (pagesData?.length) {
