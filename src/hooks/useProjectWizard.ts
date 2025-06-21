@@ -39,6 +39,19 @@ export const useProjectWizard = () => {
     }
   }, [steps]);
 
+  // Auto-select first available page for analysis steps
+  useEffect(() => {
+    const currentStep = steps.find(s => s.id === activeStep);
+    if (currentStep && activeStep !== "pages" && currentStep.selectedPages?.length > 0) {
+      // If no page is selected but we have available pages, select the first one
+      if (!currentStep.selectedPageId) {
+        const firstPageId = currentStep.selectedPages[0];
+        console.log(`Auto-selecting first page ${firstPageId} for step ${activeStep}`);
+        updateStepPageSelection(firstPageId);
+      }
+    }
+  }, [activeStep, steps, updateStepPageSelection]);
+
   const handlePageToggle = (pageId: string) => {
     const newSelected = new Set(selectedPages);
     if (newSelected.has(pageId)) {
@@ -54,12 +67,14 @@ export const useProjectWizard = () => {
     if (!id) return;
 
     try {
+      console.log('Completing page selection with pages:', selectedPageIds);
       updateStepStatus("pages", "complete");
       
-      steps.forEach(step => {
-        if (step.id !== "pages") {
-          updateStepPagesSelection(selectedPageIds);
-        }
+      // Update all subsequent steps with the selected pages
+      const analysisSteps = steps.filter(step => step.id !== "pages");
+      analysisSteps.forEach(step => {
+        console.log(`Updating step ${step.id} with selected pages:`, selectedPageIds);
+        updateStepPagesSelection(selectedPageIds);
       });
 
       await extractSummary(id, selectedPageIds);
@@ -81,6 +96,7 @@ export const useProjectWizard = () => {
   };
 
   const handlePageSelect = (pageId: string) => {
+    console.log(`Selecting page ${pageId} for step ${activeStep}`);
     updateStepPageSelection(pageId);
   };
 

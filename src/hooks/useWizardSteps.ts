@@ -141,13 +141,17 @@ export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
 
   const updateStepPagesSelection = (pageIds: string[]) => {
     setSteps(prevSteps => {
-      const newSteps = prevSteps.map(step =>
-        step.id === activeStep
-          ? { ...step, selectedPages: pageIds }
-          : step
-      );
+      const newSteps = prevSteps.map(step => {
+        if (step.id === "pages") {
+          // For the pages step, update selectedPages
+          return { ...step, selectedPages: pageIds };
+        } else {
+          // For analysis steps, update selectedPages (the pages they can choose from)
+          return { ...step, selectedPages: pageIds };
+        }
+      });
       
-      // Save immediately for page selection completion
+      // Save immediately for page selection updates
       if (!isLoadingFromDatabase.current) {
         saveImmediately(activeStep, newSteps);
       }

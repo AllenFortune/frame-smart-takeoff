@@ -45,12 +45,18 @@ export const WizardAnalysisStep = ({
   const currentPage = pages.find(p => p.id === step.selectedPageId);
   const currentOverlay = step.overlay;
 
+  console.log('WizardAnalysisStep - Step:', step.id);
+  console.log('WizardAnalysisStep - Selected page ID:', step.selectedPageId);
+  console.log('WizardAnalysisStep - Current page found:', !!currentPage);
+  console.log('WizardAnalysisStep - Selected pages for step:', step.selectedPages);
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-2">
         <WizardCanvas 
           currentPage={currentPage}
           currentOverlay={currentOverlay}
+          isLoading={loading}
         />
       </div>
 

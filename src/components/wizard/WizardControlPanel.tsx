@@ -49,10 +49,17 @@ export const WizardControlPanel = ({
     return null;
   }
 
-  // Filter pages to only show selected ones from page selection step
+  // Filter pages to only show selected ones from page selection step + add debugging
   const availablePages = step.selectedPages ? 
     pages.filter(page => step.selectedPages!.includes(page.id)) : 
     pages;
+
+  console.log(`Step ${step.id} - Selected pages:`, step.selectedPages);
+  console.log(`Step ${step.id} - Available pages:`, availablePages.length);
+  console.log(`Step ${step.id} - Currently selected page:`, step.selectedPageId);
+
+  // Find the currently selected page details
+  const selectedPage = availablePages.find(p => p.id === step.selectedPageId);
 
   return (
     <Card className="rounded-2xl shadow-lg">
@@ -67,18 +74,33 @@ export const WizardControlPanel = ({
       <CardContent className="space-y-4">
         <div className="space-y-2">
           <h4 className="font-medium text-sm">Select Page:</h4>
-          <PageSelector
-            pages={availablePages}
-            selectedPageId={step.selectedPageId}
-            onPageSelect={onPageSelect}
-            loading={loading}
-          />
+          {availablePages.length === 0 ? (
+            <div className="text-sm text-muted-foreground p-3 bg-muted/30 rounded-lg">
+              No pages available. Please go back to the "Select Pages" step and choose pages for analysis.
+            </div>
+          ) : (
+            <PageSelector
+              pages={availablePages}
+              selectedPageId={step.selectedPageId}
+              onPageSelect={onPageSelect}
+              loading={loading}
+            />
+          )}
         </div>
+
+        {selectedPage && (
+          <div className="text-xs text-muted-foreground p-2 bg-muted/20 rounded">
+            <p><strong>Selected:</strong> Page {selectedPage.page_no}</p>
+            {selectedPage.sheet_number && <p><strong>Sheet:</strong> {selectedPage.sheet_number}</p>}
+            {selectedPage.description && <p><strong>Description:</strong> {selectedPage.description}</p>}
+            <p><strong>Type:</strong> {selectedPage.class}</p>
+          </div>
+        )}
 
         <Button 
           className="w-full rounded-full bg-secondary hover:bg-secondary/90"
           onClick={onRunAnalysis}
-          disabled={!step.selectedPageId || analysisLoading || step.status === "running"}
+          disabled={!step.selectedPageId || analysisLoading || step.status === "running" || availablePages.length === 0}
         >
           <Play className="w-4 h-4 mr-2" />
           {step.status === "running" ? "Running Analysis..." : "Run AI Analysis"}
