@@ -72,7 +72,7 @@ const convertPdfPageToImage = async (pdfBytes: Uint8Array, pageNumber: number): 
     
   } catch (error) {
     console.error(`Error converting PDF page ${pageNumber} to image:`, error);
-    throw error;
+    throw new Error(`PDF conversion failed for page ${pageNumber}: ${error.message}`);
   }
 };
 
@@ -172,7 +172,7 @@ serve(async (req) => {
       .update({ progress: 25, current_step: 'Downloading PDF' })
       .eq('id', jobData.id)
 
-    // Download the PDF
+    // Download the PDF with better error handling
     console.log('Downloading PDF from:', pdfUrl)
     let pdfResponse;
     try {
@@ -181,6 +181,7 @@ serve(async (req) => {
         throw new Error(`HTTP ${pdfResponse.status}: ${pdfResponse.statusText}`);
       }
     } catch (error) {
+      console.error('PDF download failed:', error);
       await supabaseClient
         .from('job_status')
         .update({ 
@@ -274,6 +275,7 @@ serve(async (req) => {
 
       let pageImageBytes: Uint8Array;
       let uploadSuccess = true;
+      let conversionMethod = 'pdf-conversion';
       
       try {
         // Try to convert PDF page to actual image
@@ -283,6 +285,7 @@ serve(async (req) => {
       } catch (conversionError) {
         console.error(`PDF conversion failed for page ${pageNo}:`, conversionError);
         console.log(`Falling back to placeholder for page ${pageNo}`);
+        conversionMethod = 'placeholder';
         
         try {
           pageImageBytes = createFallbackImage(pageNo);
@@ -299,23 +302,34 @@ serve(async (req) => {
         }
       }
 
-      // Upload page image to storage with proper error handling
+      // Upload page image to storage with improved error handling
       const imagePath = `${projectId}/page_${pageNo}.png`
       console.log(`Uploading page ${pageNo} to storage path:`, imagePath)
       
       try {
-        const { error } = await supabaseClient.storage
+        // Test bucket accessibility first
+        const { data: bucketData, error: bucketError } = await supabaseClient.storage
+          .from('plan-images')
+          .list('', { limit: 1 });
+        
+        if (bucketError) {
+          console.error('Bucket access test failed:', bucketError);
+          throw new Error(`Storage bucket not accessible: ${bucketError.message}`);
+        }
+
+        const { error: uploadError } = await supabaseClient.storage
           .from('plan-images')
           .upload(imagePath, pageImageBytes, {
             contentType: 'image/png',
             upsert: true
           })
         
-        if (error) {
-          throw error;
+        if (uploadError) {
+          console.error(`Storage upload error for page ${pageNo}:`, uploadError);
+          throw uploadError;
         }
         
-        console.log(`Successfully uploaded page ${pageNo}`)
+        console.log(`Successfully uploaded page ${pageNo} using ${conversionMethod}`);
       } catch (uploadError) {
         console.error(`Error uploading page ${pageNo} image:`, uploadError)
         uploadSuccess = false;
@@ -332,7 +346,7 @@ serve(async (req) => {
         continue;
       }
 
-      // Create signed URL with proper TTL
+      // Create signed URL with proper TTL and better error handling
       let signedUrl = null;
       try {
         const { data: signedData, error: signError } = await supabaseClient.storage
@@ -341,12 +355,30 @@ serve(async (req) => {
 
         if (signError) {
           console.error(`Error creating signed URL for page ${pageNo}:`, signError)
+          // Try to get public URL as fallback since bucket is now public
+          const { data: publicUrlData } = supabaseClient.storage
+            .from('plan-images')
+            .getPublicUrl(imagePath)
+          
+          signedUrl = publicUrlData?.publicUrl;
+          console.log(`Used public URL fallback for page ${pageNo}: ${signedUrl}`);
         } else {
           signedUrl = signedData?.signedUrl;
           console.log(`Created signed URL for page ${pageNo} with TTL ${SIGNED_URL_TTL_SECONDS}s`)
         }
       } catch (error) {
         console.error(`Failed to create signed URL for page ${pageNo}:`, error)
+        // Since bucket is public, try public URL
+        try {
+          const { data: publicUrlData } = supabaseClient.storage
+            .from('plan-images')
+            .getPublicUrl(imagePath)
+          
+          signedUrl = publicUrlData?.publicUrl;
+          console.log(`Used public URL as final fallback for page ${pageNo}`);
+        } catch (publicError) {
+          console.error(`Failed to get public URL for page ${pageNo}:`, publicError);
+        }
       }
 
       // Simulate AI classification with realistic classes and confidence scores
@@ -387,7 +419,7 @@ serve(async (req) => {
         .from('job_status')
         .update({ 
           status: 'failed', 
-          error_message: error.message,
+          error_message: `Database insert failed: ${error.message}`,
           progress: 0
         })
         .eq('id', jobData.id)
@@ -453,7 +485,8 @@ serve(async (req) => {
       JSON.stringify({ 
         error_code: 'internal_error',
         message: 'An unexpected error occurred during PDF processing',
-        hint: 'Check edge function logs for more details'
+        hint: 'Check edge function logs for more details',
+        details: error.message
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
