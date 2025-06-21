@@ -1,60 +1,77 @@
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderOpen, Calendar, DollarSign, AlertCircle, RefreshCw } from "lucide-react";
+import { Plus, FolderOpen, Calendar, DollarSign } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
-import { useProjects } from "@/hooks/useProjects";
+import { supabase } from "@/integrations/supabase/client";
+
+interface Project {
+  id: string;
+  name: string;
+  owner: string;
+  created_at: string;
+  updated_at: string;
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  
-  // Memoize userId to prevent unnecessary re-renders
-  const userId = useMemo(() => user?.id, [user?.id]);
-  
-  const { 
-    projects, 
-    loading, 
-    error, 
-    fetchProjects, 
-    createProject, 
-    reset 
-  } = useProjects(userId);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (userId) {
-      console.log('Dashboard: User authenticated, fetching projects for user:', userId);
+    if (user) {
       fetchProjects();
-    } else {
-      console.log('Dashboard: No user authenticated');
     }
-  }, [userId, fetchProjects]);
+  }, [user]);
 
-  const handleNewProject = async () => {
-    if (!userId) {
-      console.error('Dashboard: No user authenticated for project creation');
-      return;
-    }
-    
-    console.log('Dashboard: Creating new project for user:', userId);
-    
-    const projectName = `New Project ${new Date().toLocaleDateString()}`;
-    const newProject = await createProject(projectName);
-    
-    if (newProject) {
-      console.log('Dashboard: Navigating to upload page for project:', newProject.id);
-      navigate(`/project/${newProject.id}/upload`);
+  const fetchProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('*')
+        .eq('owner', user?.id)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching projects:', error);
+        return;
+      }
+
+      setProjects(data || []);
+    } catch (error) {
+      console.error('Error fetching projects:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleRetry = () => {
-    console.log('Dashboard: Manual retry requested');
-    reset();
-    fetchProjects();
+  const handleNewProject = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          name: `New Project ${new Date().toLocaleDateString()}`,
+          owner: user.id
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('Error creating project:', error);
+        return;
+      }
+
+      navigate(`/project/${data.id}/upload`);
+    } catch (error) {
+      console.error('Error creating project:', error);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -70,35 +87,12 @@ const Dashboard = () => {
     }
   };
 
-  if (loading && projects.length === 0) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <AppNavbar />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error && projects.length === 0) {
-    return (
-      <div className="min-h-screen bg-background">
-        <AppNavbar />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
-            <AlertCircle className="w-16 h-16 text-destructive" />
-            <div className="text-center space-y-2">
-              <h3 className="text-xl font-semibold">Connection Error</h3>
-              <p className="text-muted-foreground max-w-md">
-                {error}
-              </p>
-            </div>
-            <Button onClick={handleRetry} variant="outline">
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Try Again
-            </Button>
-          </div>
         </div>
       </div>
     );
@@ -119,35 +113,11 @@ const Dashboard = () => {
             onClick={handleNewProject}
             className="rounded-full bg-primary hover:bg-primary/90"
             size="lg"
-            disabled={loading}
           >
-            {loading ? (
-              <>
-                <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                Creating...
-              </>
-            ) : (
-              <>
-                <Plus className="w-5 h-5 mr-2" />
-                New Project
-              </>
-            )}
+            <Plus className="w-5 h-5 mr-2" />
+            New Project
           </Button>
         </div>
-
-        {error && projects.length > 0 && (
-          <div className="mb-6 p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
-            <div className="flex items-center justify-between">
-              <p className="text-sm text-destructive">
-                Connection issues detected. Showing cached projects.
-              </p>
-              <Button onClick={handleRetry} variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-1" />
-                Retry
-              </Button>
-            </div>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
@@ -184,7 +154,7 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {projects.length === 0 && !error && (
+        {projects.length === 0 && (
           <div className="text-center py-12">
             <FolderOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-xl font-semibold mb-2">No projects yet</h3>
@@ -194,19 +164,9 @@ const Dashboard = () => {
             <Button
               onClick={handleNewProject}
               className="rounded-full bg-primary hover:bg-primary/90"
-              disabled={loading}
             >
-              {loading ? (
-                <>
-                  <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Creating...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-5 h-5 mr-2" />
-                  Create First Project
-                </>
-              )}
+              <Plus className="w-5 h-5 mr-2" />
+              Create First Project
             </Button>
           </div>
         )}
