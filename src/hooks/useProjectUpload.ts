@@ -138,15 +138,23 @@ export const useProjectUpload = () => {
 
       uploadProgress.completeUpload(`Successfully processed ${files.length} PDF file(s)`);
 
-      // Navigate to pages selection after a short delay
+      console.log('Upload and processing complete, navigating to wizard...');
+      
+      // Navigate to wizard after a short delay
       setTimeout(() => {
-        navigate(`/project/${id}/pages`);
+        navigate(`/project/${id}/wizard`);
       }, 1500);
 
     } catch (error) {
       console.error('Upload process failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      console.error('Full error details:', error);
       uploadProgress.failUpload(errorMessage);
+      
+      // Additional error logging for debugging
+      if (error instanceof Error) {
+        console.error('Error stack:', error.stack);
+      }
     }
   };
 
