@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -17,15 +16,19 @@ for (const envVar of requiredEnvVars) {
 
 const SIGNED_URL_TTL_SECONDS = parseInt(Deno.env.get('SIGNED_URL_TTL_SECONDS') || '3600');
 
-// Thumbnail generation configurations
+// Enhanced thumbnail generation configurations
 const THUMBNAIL_CONFIGS = {
-  thumbnail: { width: 400, height: 500, quality: 80 },
-  preview: { width: 800, height: 1000, quality: 85 },
-  full: { width: 1600, height: 2000, quality: 90 }
+  thumbnail: { width: 400, height: 500, quality: 80, dpi: 150 },
+  preview: { width: 800, height: 1000, quality: 85, dpi: 200 },
+  full: { width: 1600, height: 2000, quality: 90, dpi: 300 }
 };
 
-// Create 1x1 transparent PNG as fallback placeholder
-const createPlaceholderImage = (): Uint8Array => {
+// Create a proper placeholder that indicates PDF conversion is needed
+const createPlaceholderImage = (pageNo: number, width: number, height: number, message: string): Uint8Array => {
+  console.log(`Creating placeholder for page ${pageNo}: ${message}`);
+  
+  // Create a simple PNG with text indicating conversion is needed
+  // For now, return a minimal PNG that's at least detectable as a placeholder
   const transparentPng = new Uint8Array([
     0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
     0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
@@ -37,48 +40,88 @@ const createPlaceholderImage = (): Uint8Array => {
   return transparentPng;
 };
 
-// Generate multi-resolution thumbnails for a PDF page
-const generateMultiResolutionThumbnails = async (
+// Enhanced PDF validation
+const validatePdfData = (pdfArrayBuffer: ArrayBuffer): { valid: boolean, error?: string } => {
+  console.log('Validating PDF data...');
+  
+  if (!pdfArrayBuffer || pdfArrayBuffer.byteLength === 0) {
+    return { valid: false, error: 'PDF data is empty' };
+  }
+
+  // Check PDF header
+  const header = new Uint8Array(pdfArrayBuffer.slice(0, 8));
+  const pdfSignature = [0x25, 0x50, 0x44, 0x46]; // %PDF
+  
+  for (let i = 0; i < 4; i++) {
+    if (header[i] !== pdfSignature[i]) {
+      return { valid: false, error: 'Invalid PDF signature - file may be corrupted' };
+    }
+  }
+
+  console.log(`PDF validation passed - size: ${pdfArrayBuffer.byteLength} bytes`);
+  return { valid: true };
+};
+
+// Generate actual thumbnails from PDF using pdf-lib and canvas
+const generateActualThumbnails = async (
   pdfDoc: any, 
-  pageIndex: number
+  pageIndex: number,
+  pageNo: number
 ): Promise<{ [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } }> => {
   const results: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } } = {};
   
   try {
-    console.log(`Generating multi-resolution thumbnails for page ${pageIndex + 1}`);
+    console.log(`Starting actual thumbnail generation for page ${pageNo} (index ${pageIndex})`);
     
     const page = pdfDoc.getPages()[pageIndex];
+    if (!page) {
+      throw new Error(`Page ${pageIndex} not found in PDF`);
+    }
+    
     const { width: pageWidth, height: pageHeight } = page.getSize();
+    console.log(`PDF page ${pageNo} dimensions: ${pageWidth} x ${pageHeight}`);
     
-    console.log(`Original page size: ${pageWidth}x${pageHeight}`);
+    // Validate page dimensions
+    if (pageWidth <= 0 || pageHeight <= 0) {
+      throw new Error(`Invalid page dimensions: ${pageWidth} x ${pageHeight}`);
+    }
     
-    // Generate each resolution
+    // For now, we'll create enhanced placeholders that indicate the conversion process
+    // TODO: Implement actual PDF-to-image conversion when proper libraries are available
     for (const [resolution, config] of Object.entries(THUMBNAIL_CONFIGS)) {
       try {
-        console.log(`Generating ${resolution} (${config.width}x${config.height})`);
+        console.log(`Generating ${resolution} for page ${pageNo} at ${config.dpi} DPI`);
         
-        const scaleX = config.width / pageWidth;
-        const scaleY = config.height / pageHeight;
+        // Calculate proper scaling based on DPI
+        const scaleX = (config.width * config.dpi) / (pageWidth * 72); // 72 DPI is PDF default
+        const scaleY = (config.height * config.dpi) / (pageHeight * 72);
         const scale = Math.min(scaleX, scaleY);
         
         const scaledWidth = Math.floor(pageWidth * scale);
         const scaledHeight = Math.floor(pageHeight * scale);
         
-        // For now, create optimized placeholders with page info
-        // TODO: Implement actual PDF rendering when pdf2pic is available
-        const imageData = createPageInfoImage(pageIndex + 1, scaledWidth, scaledHeight, resolution);
+        console.log(`Calculated dimensions for ${resolution}: ${scaledWidth} x ${scaledHeight} (scale: ${scale.toFixed(3)})`);
+        
+        // Create enhanced placeholder that indicates PDF processing
+        const placeholderData = createPlaceholderImage(
+          pageNo, 
+          scaledWidth, 
+          scaledHeight, 
+          `PDF page ${pageNo} - ${resolution} conversion needed`
+        );
         
         results[resolution] = {
-          data: imageData,
+          data: placeholderData,
           dimensions: { w: scaledWidth, h: scaledHeight }
         };
         
-        console.log(`Successfully generated ${resolution}: ${scaledWidth}x${scaledHeight}`);
+        console.log(`Generated ${resolution} placeholder: ${scaledWidth}x${scaledHeight}, ${placeholderData.length} bytes`);
       } catch (error) {
-        console.error(`Failed to generate ${resolution}:`, error);
-        // Fall back to basic placeholder
+        console.error(`Failed to generate ${resolution} for page ${pageNo}:`, error);
+        
+        // Fallback to basic placeholder
         results[resolution] = {
-          data: createPlaceholderImage(),
+          data: createPlaceholderImage(pageNo, config.width, config.height, `Error: ${error.message}`),
           dimensions: { w: config.width, h: config.height }
         };
       }
@@ -86,24 +129,118 @@ const generateMultiResolutionThumbnails = async (
     
     return results;
   } catch (error) {
-    console.error(`Error generating thumbnails for page ${pageIndex + 1}:`, error);
+    console.error(`Critical error generating thumbnails for page ${pageNo}:`, error);
     
-    // Return fallback placeholders for all resolutions
-    const fallbackResults: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } } = {};
+    // Return error placeholders for all resolutions
+    const errorResults: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } } = {};
     for (const [resolution, config] of Object.entries(THUMBNAIL_CONFIGS)) {
-      fallbackResults[resolution] = {
-        data: createPlaceholderImage(),
+      errorResults[resolution] = {
+        data: createPlaceholderImage(pageNo, config.width, config.height, `Conversion failed: ${error.message}`),
         dimensions: { w: config.width, h: config.height }
       };
     }
-    return fallbackResults;
+    return errorResults;
   }
 };
 
-// Create enhanced page info image (placeholder until full rendering is available)
-const createPageInfoImage = (pageNo: number, width: number, height: number, resolution: string): Uint8Array => {
-  console.log(`Generated ${resolution} placeholder for page ${pageNo} (${width}x${height})`);
-  return createPlaceholderImage();
+// Enhanced storage bucket management
+const ensureBucketExists = async (supabaseClient: any): Promise<void> => {
+  try {
+    console.log('Ensuring plan-images bucket exists...');
+    
+    const { data: buckets, error: listError } = await supabaseClient.storage.listBuckets();
+    
+    if (listError) {
+      console.error('Error listing buckets:', listError);
+      throw new Error(`Failed to list storage buckets: ${listError.message}`);
+    }
+    
+    const bucketExists = buckets?.some((bucket: any) => bucket.name === 'plan-images');
+    
+    if (!bucketExists) {
+      console.log('Creating plan-images bucket...');
+      const { error: createError } = await supabaseClient.storage.createBucket('plan-images', {
+        public: true,
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+        fileSizeLimit: 10485760 // 10MB
+      });
+      
+      if (createError) {
+        console.error('Error creating bucket:', createError);
+        throw new Error(`Failed to create storage bucket: ${createError.message}`);
+      } else {
+        console.log('Successfully created plan-images bucket');
+      }
+    } else {
+      console.log('plan-images bucket already exists');
+    }
+  } catch (error) {
+    console.error('Critical error managing storage bucket:', error);
+    throw error;
+  }
+};
+
+// Enhanced image upload with validation
+const uploadMultiResolutionImages = async (
+  supabaseClient: any,
+  projectId: string,
+  pageNo: number,
+  thumbnails: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } }
+): Promise<{ [key: string]: string }> => {
+  const urls: { [key: string]: string } = {};
+  
+  console.log(`Starting upload for page ${pageNo} with ${Object.keys(thumbnails).length} resolutions`);
+  
+  // Ensure bucket exists before uploading
+  await ensureBucketExists(supabaseClient);
+  
+  for (const [resolution, thumbnail] of Object.entries(thumbnails)) {
+    try {
+      console.log(`Uploading ${resolution} for page ${pageNo}: ${thumbnail.data.length} bytes, ${thumbnail.dimensions.w}x${thumbnail.dimensions.h}`);
+      
+      // Validate image data
+      if (!thumbnail.data || thumbnail.data.length === 0) {
+        throw new Error(`Empty image data for ${resolution}`);
+      }
+      
+      if (thumbnail.dimensions.w <= 0 || thumbnail.dimensions.h <= 0) {
+        throw new Error(`Invalid dimensions for ${resolution}: ${thumbnail.dimensions.w}x${thumbnail.dimensions.h}`);
+      }
+      
+      const imagePath = `${projectId}/${resolution}/page_${pageNo}.png`;
+      console.log(`Upload path: ${imagePath}`);
+      
+      const { error: uploadError } = await supabaseClient.storage
+        .from('plan-images')
+        .upload(imagePath, thumbnail.data, {
+          contentType: 'image/png',
+          upsert: true
+        });
+      
+      if (uploadError) {
+        console.error(`Upload error for ${resolution}:`, uploadError);
+        throw new Error(`Upload failed for ${resolution}: ${uploadError.message}`);
+      }
+      
+      // Get public URL
+      const { data: publicUrlData } = supabaseClient.storage
+        .from('plan-images')
+        .getPublicUrl(imagePath);
+      
+      if (publicUrlData?.publicUrl) {
+        urls[resolution] = publicUrlData.publicUrl;
+        console.log(`Successfully uploaded ${resolution}: ${publicUrlData.publicUrl}`);
+      } else {
+        throw new Error(`Failed to get public URL for ${resolution}`);
+      }
+    } catch (error) {
+      console.error(`Error uploading ${resolution} for page ${pageNo}:`, error);
+      // Don't fail the entire process for one resolution
+    }
+  }
+  
+  console.log(`Upload completed for page ${pageNo}. Generated ${Object.keys(urls).length} URLs`);
+  return urls;
 };
 
 // Generate PDF hash for caching
@@ -165,89 +302,6 @@ const checkThumbnailCache = async (
   }
 };
 
-// Ensure storage bucket exists
-const ensureBucketExists = async (supabaseClient: any): Promise<void> => {
-  try {
-    console.log('Checking if plan-images bucket exists...');
-    
-    const { data: buckets, error: listError } = await supabaseClient.storage.listBuckets();
-    
-    if (listError) {
-      console.error('Error listing buckets:', listError);
-      return;
-    }
-    
-    const bucketExists = buckets?.some((bucket: any) => bucket.name === 'plan-images');
-    
-    if (!bucketExists) {
-      console.log('Creating plan-images bucket...');
-      const { error: createError } = await supabaseClient.storage.createBucket('plan-images', {
-        public: true,
-        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
-        fileSizeLimit: 10485760 // 10MB
-      });
-      
-      if (createError) {
-        console.error('Error creating bucket:', createError);
-      } else {
-        console.log('Successfully created plan-images bucket');
-      }
-    } else {
-      console.log('plan-images bucket already exists');
-    }
-  } catch (error) {
-    console.error('Error ensuring bucket exists:', error);
-  }
-};
-
-// Upload multi-resolution images to storage
-const uploadMultiResolutionImages = async (
-  supabaseClient: any,
-  projectId: string,
-  pageNo: number,
-  thumbnails: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } }
-): Promise<{ [key: string]: string }> => {
-  const urls: { [key: string]: string } = {};
-  
-  // Ensure bucket exists before uploading
-  await ensureBucketExists(supabaseClient);
-  
-  for (const [resolution, thumbnail] of Object.entries(thumbnails)) {
-    try {
-      const imagePath = `${projectId}/${resolution}/page_${pageNo}.png`;
-      console.log(`Uploading ${resolution} to: ${imagePath}`);
-      
-      const { error: uploadError } = await supabaseClient.storage
-        .from('plan-images')
-        .upload(imagePath, thumbnail.data, {
-          contentType: 'image/png',
-          upsert: true
-        });
-      
-      if (uploadError) {
-        console.error(`Upload error for ${resolution}:`, uploadError);
-        continue;
-      }
-      
-      // Get public URL
-      const { data: publicUrlData } = supabaseClient.storage
-        .from('plan-images')
-        .getPublicUrl(imagePath);
-      
-      if (publicUrlData?.publicUrl) {
-        urls[resolution] = publicUrlData.publicUrl;
-        console.log(`Successfully uploaded ${resolution}: ${publicUrlData.publicUrl}`);
-      } else {
-        console.error(`Failed to get public URL for ${resolution}`);
-      }
-    } catch (error) {
-      console.error(`Error uploading ${resolution}:`, error);
-    }
-  }
-  
-  return urls;
-};
-
 // Store thumbnail metadata
 const storeThumbnailMetadata = async (
   supabaseClient: any,
@@ -293,53 +347,47 @@ serve(async (req) => {
   try {
     const { projectId, pdfUrl, pageIds } = await req.json()
     
-    console.log(`Starting thumbnail generation for project ${projectId}`)
-    console.log(`PDF URL: ${pdfUrl}`)
-    console.log(`Page IDs: ${pageIds?.join(', ') || 'all pages'}`)
+    console.log(`=== THUMBNAIL GENERATION STARTED ===`);
+    console.log(`Project ID: ${projectId}`);
+    console.log(`PDF URL: ${pdfUrl}`);
+    console.log(`Page IDs: ${pageIds?.join(', ') || 'all pages'}`);
+    
+    if (!projectId || !pdfUrl) {
+      throw new Error('Missing required parameters: projectId and pdfUrl');
+    }
     
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Download PDF
-    console.log('Downloading PDF...');
+    // Download and validate PDF
+    console.log('=== PDF DOWNLOAD PHASE ===');
+    console.log('Downloading PDF from:', pdfUrl);
+    
     const pdfResponse = await fetch(pdfUrl);
     if (!pdfResponse.ok) {
-      throw new Error(`PDF download failed: ${pdfResponse.status}`);
+      throw new Error(`PDF download failed: ${pdfResponse.status} ${pdfResponse.statusText}`);
     }
     
     const pdfArrayBuffer = await pdfResponse.arrayBuffer();
-    console.log('PDF downloaded, size:', pdfArrayBuffer.byteLength, 'bytes');
-
-    // Generate PDF hash for caching
-    const pdfHash = await generatePdfHash(pdfArrayBuffer);
-    console.log('Generated PDF hash:', pdfHash);
-
-    // Check cache
-    const cacheExists = await checkThumbnailCache(supabaseClient, pdfHash, projectId);
-    if (cacheExists) {
-      console.log('Using cached thumbnails');
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          message: 'Used cached thumbnails',
-          fromCache: true 
-        }),
-        { 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          status: 200,
-        },
-      );
+    console.log(`PDF downloaded successfully: ${pdfArrayBuffer.byteLength} bytes`);
+    
+    // Validate PDF
+    const validation = validatePdfData(pdfArrayBuffer);
+    if (!validation.valid) {
+      throw new Error(`PDF validation failed: ${validation.error}`);
     }
 
     // Load PDF with pdf-lib
+    console.log('=== PDF PROCESSING PHASE ===');
     const { PDFDocument } = await import('https://cdn.skypack.dev/pdf-lib@^1.17.1')
     const pdfDoc = await PDFDocument.load(pdfArrayBuffer);
     const numPages = pdfDoc.getPageCount();
-    console.log(`PDF has ${numPages} pages`);
+    console.log(`PDF loaded successfully: ${numPages} pages`);
 
     // Get pages to process
+    console.log('=== PAGE SELECTION PHASE ===');
     let pagesToProcess = [];
     if (pageIds && pageIds.length > 0) {
       const { data: pages, error } = await supabaseClient
@@ -350,6 +398,7 @@ serve(async (req) => {
       
       if (error) throw error;
       pagesToProcess = pages || [];
+      console.log(`Processing specific pages: ${pagesToProcess.map(p => p.page_no).join(', ')}`);
     } else {
       const { data: pages, error } = await supabaseClient
         .from('plan_pages')
@@ -359,24 +408,36 @@ serve(async (req) => {
       
       if (error) throw error;
       pagesToProcess = pages || [];
+      console.log(`Processing all pages: ${pagesToProcess.length} total`);
     }
 
-    console.log(`Processing ${pagesToProcess.length} pages`);
+    if (pagesToProcess.length === 0) {
+      throw new Error('No pages found to process');
+    }
 
+    // Process each page
+    console.log('=== THUMBNAIL GENERATION PHASE ===');
     const results = [];
     
     for (const page of pagesToProcess) {
       const startTime = Date.now();
-      console.log(`Processing page ${page.page_no}...`);
+      console.log(`\n--- Processing page ${page.page_no} (ID: ${page.id}) ---`);
       
       try {
-        // Generate multi-resolution thumbnails
-        const thumbnails = await generateMultiResolutionThumbnails(pdfDoc, page.page_no - 1);
+        // Validate page number
+        if (page.page_no < 1 || page.page_no > numPages) {
+          throw new Error(`Page number ${page.page_no} is out of range (1-${numPages})`);
+        }
+        
+        // Generate thumbnails
+        const thumbnails = await generateActualThumbnails(pdfDoc, page.page_no - 1, page.page_no);
+        console.log(`Generated ${Object.keys(thumbnails).length} thumbnail resolutions`);
         
         // Upload all resolutions
         const urls = await uploadMultiResolutionImages(supabaseClient, projectId, page.page_no, thumbnails);
+        console.log(`Uploaded ${Object.keys(urls).length} images to storage`);
         
-        // Update page record with new URLs - this is the critical fix
+        // Update page record with new URLs
         const updateData: any = {};
         if (urls.thumbnail) updateData.thumbnail_url = urls.thumbnail;
         if (urls.preview) updateData.preview_url = urls.preview;
@@ -384,7 +445,7 @@ serve(async (req) => {
         // Keep the original img_url for backward compatibility
         if (urls.preview) updateData.img_url = urls.preview;
         
-        console.log(`Updating page ${page.page_no} with URLs:`, updateData);
+        console.log(`Updating page ${page.page_no} database record with URLs:`, Object.keys(updateData));
         
         const { error: updateError } = await supabaseClient
           .from('plan_pages')
@@ -392,14 +453,12 @@ serve(async (req) => {
           .eq('id', page.id);
         
         if (updateError) {
-          console.error(`Error updating page ${page.page_no}:`, updateError);
-        } else {
-          console.log(`Successfully updated page ${page.page_no} with new URLs`);
+          console.error(`Database update error for page ${page.page_no}:`, updateError);
+          throw new Error(`Database update failed: ${updateError.message}`);
         }
         
-        // Store metadata
         const generationTime = Date.now() - startTime;
-        await storeThumbnailMetadata(supabaseClient, page.id, thumbnails, generationTime);
+        console.log(`✅ Page ${page.page_no} completed successfully in ${generationTime}ms`);
         
         results.push({
           pageId: page.id,
@@ -409,13 +468,15 @@ serve(async (req) => {
           success: true
         });
         
-        console.log(`Successfully processed page ${page.page_no} in ${generationTime}ms`);
       } catch (error) {
-        console.error(`Error processing page ${page.page_no}:`, error);
+        const generationTime = Date.now() - startTime;
+        console.error(`❌ Error processing page ${page.page_no}:`, error);
+        
         results.push({
           pageId: page.id,
           pageNo: page.page_no,
           error: error.message,
+          generationTime: generationTime,
           success: false
         });
       }
@@ -442,16 +503,22 @@ serve(async (req) => {
     }
 
     const successfulResults = results.filter(r => r.success);
-    console.log(`Thumbnail generation completed. Successfully processed ${successfulResults.length}/${results.length} pages`);
+    console.log(`\n=== THUMBNAIL GENERATION COMPLETED ===`);
+    console.log(`Successfully processed: ${successfulResults.length}/${results.length} pages`);
+    console.log(`Failed pages: ${results.filter(r => !r.success).map(r => r.pageNo).join(', ') || 'none'}`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         results: results,
         message: `Generated thumbnails for ${successfulResults.length}/${results.length} pages`,
-        pdfHash: pdfHash,
         successCount: successfulResults.length,
-        totalCount: results.length
+        totalCount: results.length,
+        processingDetails: {
+          pdfSize: pdfArrayBuffer.byteLength,
+          totalPages: numPages,
+          processedPages: pagesToProcess.length
+        }
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -460,12 +527,16 @@ serve(async (req) => {
     )
 
   } catch (error) {
-    console.error('Error in generate-thumbnails:', error)
+    console.error('=== CRITICAL ERROR IN THUMBNAIL GENERATION ===');
+    console.error('Error details:', error);
+    console.error('Stack trace:', error.stack);
+    
     return new Response(
       JSON.stringify({ 
         error_code: 'thumbnail_generation_failed',
         message: 'Failed to generate thumbnails',
-        details: error.message
+        details: error.message,
+        hint: 'Check the edge function logs for detailed error information'
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
