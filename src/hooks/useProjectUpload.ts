@@ -71,12 +71,17 @@ export const useProjectUpload = () => {
         throw new Error(`Failed to upload ${file.name}: ${error.message}`);
       }
 
-      // Get public URL
+      // Get public URL since bucket is now public
       const { data: urlData } = supabase.storage
         .from('plan-pdfs')
         .getPublicUrl(fileName);
       
+      if (!urlData?.publicUrl) {
+        throw new Error(`Failed to get public URL for ${file.name}`);
+      }
+      
       uploadedUrls.push(urlData.publicUrl);
+      console.log(`Successfully uploaded ${file.name}, public URL: ${urlData.publicUrl}`);
       
       // Update progress (upload is 50% of total)
       const progress = Math.round(((i + 1) / files.length) * 50);
@@ -125,13 +130,35 @@ export const useProjectUpload = () => {
           const result = await classifyPages(id, pdfUrl);
           console.log('Classification result:', result);
           
+          // Check for specific error codes and provide helpful messages
+          if (result.error_code) {
+            let errorMessage = result.message || 'Unknown error occurred';
+            
+            switch (result.error_code) {
+              case 'pdf_download_failed':
+                errorMessage = `PDF download failed: ${result.hint || 'Please check if the file is accessible'}`;
+                break;
+              case 'pdf_too_large':
+                errorMessage = 'File exceeds 50 MB size limit. Please split the plan into smaller files.';
+                break;
+              case 'database_insert_failed':
+                errorMessage = 'Failed to save page data. Please try again.';
+                break;
+              default:
+                errorMessage = result.message || 'Processing failed. Please try again.';
+            }
+            
+            throw new Error(errorMessage);
+          }
+          
           // Update progress
           const processingProgress = 50 + Math.round(((i + 1) / uploadedUrls.length) * 50);
           uploadProgress.updateProgress(processingProgress);
           
         } catch (classifyError) {
           console.error('Classification error for URL:', pdfUrl, classifyError);
-          uploadProgress.failUpload(`Failed to process ${files[i]?.name || 'PDF'}: ${classifyError instanceof Error ? classifyError.message : 'Unknown error'}`);
+          const errorMessage = classifyError instanceof Error ? classifyError.message : 'Failed to process PDF';
+          uploadProgress.failUpload(`Failed to process ${files[i]?.name || 'PDF'}: ${errorMessage}`);
           return;
         }
       }
