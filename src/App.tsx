@@ -13,6 +13,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ProjectUpload from "./pages/ProjectUpload";
 import ProjectWizard from "./pages/ProjectWizard";
+import ProjectPreflight from "./pages/ProjectPreflight";
 import ProjectReview from "./pages/ProjectReview";
 import ProjectResults from "./pages/ProjectResults";
 import Settings from "./pages/Settings";
@@ -47,6 +48,11 @@ const App = () => (
               <Route path="/project/:id/upload" element={
                 <ProtectedRoute>
                   <ProjectUpload />
+                </ProtectedRoute>
+              } />
+              <Route path="/project/:id/preflight" element={
+                <ProtectedRoute>
+                  <ProjectPreflight />
                 </ProtectedRoute>
               } />
               {/* Redirect old pages route to wizard */}

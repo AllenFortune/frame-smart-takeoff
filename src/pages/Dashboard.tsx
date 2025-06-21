@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -218,7 +217,7 @@ const Dashboard = () => {
             <Card
               key={project.id}
               className="rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer"
-              onClick={() => navigate(`/project/${project.id}/preflight`)}
+              onClick={() => navigate(`/project/${project.id}/upload`)}
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">

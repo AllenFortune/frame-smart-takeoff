@@ -1,4 +1,3 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -138,7 +137,7 @@ const ProjectPreflight = () => {
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
-                    <BreadcrumbLink onClick={() => navigate(`/project/${id}/pages`)} className="cursor-pointer">
+                    <BreadcrumbLink onClick={() => navigate(`/project/${id}/upload`)} className="cursor-pointer">
                       {project?.name || 'Project'}
                     </BreadcrumbLink>
                   </BreadcrumbItem>
@@ -161,10 +160,10 @@ const ProjectPreflight = () => {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => navigate(`/project/${id}/pages`)}
+                  onClick={() => navigate(`/project/${id}/upload`)}
                 >
                   <ArrowLeft className="w-4 h-4 mr-2" />
-                  Back to Pages
+                  Back to Upload
                 </Button>
               </div>
             </div>
@@ -268,12 +267,12 @@ const ProjectPreflight = () => {
               )}
 
               <Button
-                onClick={() => navigate(`/project/${id}/specs`)}
+                onClick={() => navigate(`/project/${id}/wizard`)}
                 className="w-full rounded-full bg-primary hover:bg-primary/90"
                 size="lg"
                 disabled={pages.length === 0}
               >
-                Continue to Specs
+                Continue to Wizard
                 <ArrowRight className="w-5 h-5 ml-2" />
               </Button>
             </div>
