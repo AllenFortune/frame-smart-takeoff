@@ -152,9 +152,9 @@ const ProjectUpload = () => {
 
       uploadProgress.completeUpload(`Successfully processed ${files.length} PDF file(s)`);
 
-      // Navigate to preflight after a short delay
+      // Navigate to pages selection after a short delay
       setTimeout(() => {
-        navigate(`/project/${id}/preflight`);
+        navigate(`/project/${id}/pages`);
       }, 1500);
 
     } catch (error) {
