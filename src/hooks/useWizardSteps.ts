@@ -8,18 +8,20 @@ export interface StepData {
   name: string;
   status: "pending" | "running" | "complete";
   selectedPageId?: string;
+  selectedPages?: string[]; // For page selection step
   overlay?: any;
 }
 
 export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
   const [steps, setSteps] = useState<StepData[]>([
+    { id: "pages", name: "Select Pages", status: "pending" },
     { id: "exterior", name: "Exterior Walls", status: "pending" },
     { id: "interior", name: "Interior Walls", status: "pending" },
     { id: "headers", name: "Headers", status: "pending" },
     { id: "hardware", name: "Hardware", status: "pending" },
   ]);
 
-  const [activeStep, setActiveStep] = useState("exterior");
+  const [activeStep, setActiveStep] = useState("pages");
   const { progress, loading: progressLoading, saving, saveProgress } = useWizardProgress(projectId);
 
   // Load progress when available
@@ -36,6 +38,7 @@ export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
               ...step,
               status: savedStepData.status,
               selectedPageId: savedStepData.selectedPageId,
+              selectedPages: savedStepData.selectedPages,
               overlay: savedStepData.overlay
             };
           }
@@ -67,6 +70,7 @@ export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
       const stepData = steps.reduce((acc, step) => {
         acc[step.id] = {
           selectedPageId: step.selectedPageId,
+          selectedPages: step.selectedPages,
           status: step.status,
           overlay: step.overlay
         };
@@ -82,6 +86,16 @@ export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
       prevSteps.map(step =>
         step.id === activeStep
           ? { ...step, selectedPageId: pageId }
+          : step
+      )
+    );
+  };
+
+  const updateStepPagesSelection = (pageIds: string[]) => {
+    setSteps(prevSteps =>
+      prevSteps.map(step =>
+        step.id === activeStep
+          ? { ...step, selectedPages: pageIds }
           : step
       )
     );
@@ -139,6 +153,7 @@ export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
       }
     },
     updateStepPageSelection,
+    updateStepPagesSelection,
     updateStepStatus,
     moveToNextStep,
     moveToPreviousStep,

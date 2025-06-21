@@ -12,9 +12,6 @@ import LandingPage from "./pages/LandingPage";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import ProjectUpload from "./pages/ProjectUpload";
-import ProjectPages from "./pages/ProjectPages";
-import ProjectPreflight from "./pages/ProjectPreflight";
-import ProjectSpecs from "./pages/ProjectSpecs";
 import ProjectWizard from "./pages/ProjectWizard";
 import ProjectReview from "./pages/ProjectReview";
 import ProjectResults from "./pages/ProjectResults";
@@ -50,21 +47,6 @@ const App = () => (
               <Route path="/project/:id/upload" element={
                 <ProtectedRoute>
                   <ProjectUpload />
-                </ProtectedRoute>
-              } />
-              <Route path="/project/:id/pages" element={
-                <ProtectedRoute>
-                  <ProjectPages />
-                </ProtectedRoute>
-              } />
-              <Route path="/project/:id/preflight" element={
-                <ProtectedRoute>
-                  <ProjectPreflight />
-                </ProtectedRoute>
-              } />
-              <Route path="/project/:id/specs" element={
-                <ProtectedRoute>
-                  <ProjectSpecs />
                 </ProtectedRoute>
               } />
               <Route path="/project/:id/wizard" element={

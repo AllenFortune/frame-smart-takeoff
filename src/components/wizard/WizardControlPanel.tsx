@@ -11,6 +11,7 @@ interface StepData {
   name: string;
   status: "pending" | "running" | "complete";
   selectedPageId?: string;
+  selectedPages?: string[];
   overlay?: any;
 }
 
@@ -43,6 +44,16 @@ export const WizardControlPanel = ({
   canGoBack,
   canNavigateToStep
 }: WizardControlPanelProps) => {
+  // Don't show control panel for page selection step
+  if (step.id === "pages") {
+    return null;
+  }
+
+  // Filter pages to only show selected ones from page selection step
+  const availablePages = step.selectedPages ? 
+    pages.filter(page => step.selectedPages!.includes(page.id)) : 
+    pages;
+
   return (
     <Card className="rounded-2xl shadow-lg">
       <CardHeader>
@@ -57,7 +68,7 @@ export const WizardControlPanel = ({
         <div className="space-y-2">
           <h4 className="font-medium text-sm">Select Page:</h4>
           <PageSelector
-            pages={pages}
+            pages={availablePages}
             selectedPageId={step.selectedPageId}
             onPageSelect={onPageSelect}
             loading={loading}

@@ -2,7 +2,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { useProjectData } from "@/hooks/useProjectData";
-import { generateOverlay } from "@/utils/edgeFunctions";
+import { generateOverlay, extractSummary } from "@/utils/edgeFunctions";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { AppNavbar } from "@/components/AppNavbar";
@@ -11,6 +11,7 @@ import { WizardTabs } from "@/components/wizard/WizardTabs";
 import { WizardCanvas } from "@/components/wizard/WizardCanvas";
 import { WizardControlPanel } from "@/components/wizard/WizardControlPanel";
 import { WizardProgressIndicator } from "@/components/wizard/WizardProgressIndicator";
+import { WizardPageSelection } from "@/components/wizard/WizardPageSelection";
 import { useWizardSteps } from "@/hooks/useWizardSteps";
 import { useWizardProgress } from "@/hooks/useWizardProgress";
 
@@ -28,6 +29,7 @@ const ProjectWizard = () => {
     progressLoading,
     setActiveStep,
     updateStepPageSelection,
+    updateStepPagesSelection,
     updateStepStatus,
     moveToNextStep,
     moveToPreviousStep,
@@ -35,6 +37,61 @@ const ProjectWizard = () => {
   } = useWizardSteps(id!, overlays);
   
   const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
+
+  // Initialize selected pages from step data
+  React.useEffect(() => {
+    const pagesStep = steps.find(s => s.id === "pages");
+    if (pagesStep?.selectedPages) {
+      setSelectedPages(new Set(pagesStep.selectedPages));
+    }
+  }, [steps]);
+
+  const handlePageToggle = (pageId: string) => {
+    const newSelected = new Set(selectedPages);
+    if (newSelected.has(pageId)) {
+      newSelected.delete(pageId);
+    } else {
+      newSelected.add(pageId);
+    }
+    setSelectedPages(newSelected);
+    updateStepPagesSelection(Array.from(newSelected));
+  };
+
+  const handlePageSelectionContinue = async (selectedPageIds: string[]) => {
+    if (!id) return;
+
+    try {
+      // Mark page selection as complete
+      updateStepStatus("pages", "complete");
+      
+      // Update all analysis steps with selected pages
+      steps.forEach(step => {
+        if (step.id !== "pages") {
+          updateStepPagesSelection(selectedPageIds);
+        }
+      });
+
+      // Start summary extraction
+      await extractSummary(id, selectedPageIds);
+
+      toast({
+        title: "Pages Selected",
+        description: `Selected ${selectedPageIds.length} pages for analysis.`
+      });
+
+      // Move to next step
+      moveToNextStep();
+
+    } catch (error) {
+      console.error('Error processing page selection:', error);
+      toast({
+        title: "Error",
+        description: "Failed to process page selection. Please try again.",
+        variant: "destructive"
+      });
+    }
+  };
 
   const handlePageSelect = (pageId: string) => {
     updateStepPageSelection(pageId);
@@ -158,31 +215,41 @@ const ProjectWizard = () => {
         <Tabs value={activeStep} onValueChange={setActiveStep} className="w-full">
           {steps.map((step) => (
             <TabsContent key={step.id} value={step.id}>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2">
-                  <WizardCanvas 
-                    currentPage={currentPage}
-                    currentOverlay={currentOverlay}
-                  />
-                </div>
+              {step.id === "pages" ? (
+                <WizardPageSelection
+                  pages={pages}
+                  selectedPages={selectedPages}
+                  loading={loading}
+                  onPageToggle={handlePageToggle}
+                  onContinue={handlePageSelectionContinue}
+                />
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  <div className="lg:col-span-2">
+                    <WizardCanvas 
+                      currentPage={currentPage}
+                      currentOverlay={currentOverlay}
+                    />
+                  </div>
 
-                <div className="space-y-6">
-                  <WizardControlPanel
-                    step={step}
-                    pages={pages}
-                    loading={loading}
-                    analysisLoading={analysisLoading}
-                    currentStepIndex={currentStepIndex}
-                    totalSteps={steps.length}
-                    onPageSelect={handlePageSelect}
-                    onRunAnalysis={handleRunAnalysis}
-                    onAcceptAndNext={handleAcceptAndNext}
-                    onPreviousStep={handlePreviousStep}
-                    canGoBack={canGoBack}
-                    canNavigateToStep={canNavigateToStep}
-                  />
+                  <div className="space-y-6">
+                    <WizardControlPanel
+                      step={step}
+                      pages={pages}
+                      loading={loading}
+                      analysisLoading={analysisLoading}
+                      currentStepIndex={currentStepIndex}
+                      totalSteps={steps.length}
+                      onPageSelect={handlePageSelect}
+                      onRunAnalysis={handleRunAnalysis}
+                      onAcceptAndNext={handleAcceptAndNext}
+                      onPreviousStep={handlePreviousStep}
+                      canGoBack={canGoBack}
+                      canNavigateToStep={canNavigateToStep}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
             </TabsContent>
           ))}
         </Tabs>
