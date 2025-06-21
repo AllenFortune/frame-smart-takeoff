@@ -137,6 +137,7 @@ const ProjectWizard = () => {
   const currentStep = steps.find(s => s.id === activeStep);
   const currentPage = pages.find(p => p.id === currentStep?.selectedPageId);
   const currentOverlay = currentStep?.overlay;
+  const currentStepIndex = steps.findIndex(s => s.id === activeStep);
 
   if (!id) {
     return <div>Project ID not found</div>;
