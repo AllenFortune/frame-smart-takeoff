@@ -1,13 +1,13 @@
-
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderOpen, Calendar, DollarSign } from "lucide-react";
+import { Plus, FolderOpen, Calendar, DollarSign, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface Project {
   id: string;
@@ -20,17 +20,39 @@ interface Project {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
+      console.log('Dashboard: User authenticated, fetching projects for user:', user.id);
       fetchProjects();
+    } else {
+      console.log('Dashboard: No user authenticated');
+      setLoading(false);
     }
   }, [user]);
 
   const fetchProjects = async () => {
     try {
+      console.log('Dashboard: Starting to fetch projects...');
+      setError(null);
+      
+      // Test Supabase connection first
+      const { data: testData, error: testError } = await supabase
+        .from('projects')
+        .select('count', { count: 'exact', head: true });
+      
+      if (testError) {
+        console.error('Dashboard: Supabase connection test failed:', testError);
+        throw new Error(`Database connection failed: ${testError.message}`);
+      }
+      
+      console.log('Dashboard: Supabase connection successful');
+
       const { data, error } = await supabase
         .from('projects')
         .select('*')
@@ -38,40 +60,86 @@ const Dashboard = () => {
         .order('created_at', { ascending: false });
 
       if (error) {
-        console.error('Error fetching projects:', error);
-        return;
+        console.error('Dashboard: Error fetching projects:', error);
+        throw error;
       }
 
+      console.log('Dashboard: Successfully fetched projects:', data?.length || 0);
       setProjects(data || []);
     } catch (error) {
-      console.error('Error fetching projects:', error);
+      console.error('Dashboard: Error in fetchProjects:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to load projects';
+      setError(errorMessage);
+      toast({
+        title: "Error loading projects",
+        description: errorMessage,
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
   };
 
   const handleNewProject = async () => {
-    if (!user) return;
+    if (!user) {
+      console.error('Dashboard: No user authenticated for project creation');
+      toast({
+        title: "Authentication required",
+        description: "Please log in to create a project",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    console.log('Dashboard: Creating new project for user:', user.id);
+    setCreating(true);
     
     try {
+      const projectName = `New Project ${new Date().toLocaleDateString()}`;
+      console.log('Dashboard: Inserting project with name:', projectName);
+      
       const { data, error } = await supabase
         .from('projects')
         .insert({
-          name: `New Project ${new Date().toLocaleDateString()}`,
+          name: projectName,
           owner: user.id
         })
         .select()
         .single();
 
       if (error) {
-        console.error('Error creating project:', error);
-        return;
+        console.error('Dashboard: Error creating project:', error);
+        throw error;
       }
 
+      console.log('Dashboard: Project created successfully:', data);
+      
+      toast({
+        title: "Project created!",
+        description: "Your new project has been created successfully",
+      });
+
+      // Navigate to upload page
+      console.log('Dashboard: Navigating to upload page for project:', data.id);
       navigate(`/project/${data.id}/upload`);
     } catch (error) {
-      console.error('Error creating project:', error);
+      console.error('Dashboard: Error in handleNewProject:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to create project';
+      
+      toast({
+        title: "Failed to create project",
+        description: errorMessage,
+        variant: "destructive",
+      });
+    } finally {
+      setCreating(false);
     }
+  };
+
+  const retryFetch = () => {
+    console.log('Dashboard: Retrying to fetch projects...');
+    setLoading(true);
+    fetchProjects();
   };
 
   const getStatusColor = (status: string) => {
@@ -98,6 +166,28 @@ const Dashboard = () => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="flex flex-col items-center justify-center min-h-[400px] space-y-4">
+            <AlertCircle className="w-16 h-16 text-destructive" />
+            <div className="text-center space-y-2">
+              <h3 className="text-xl font-semibold">Connection Error</h3>
+              <p className="text-muted-foreground max-w-md">
+                {error}
+              </p>
+            </div>
+            <Button onClick={retryFetch} variant="outline">
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
@@ -113,9 +203,19 @@ const Dashboard = () => {
             onClick={handleNewProject}
             className="rounded-full bg-primary hover:bg-primary/90"
             size="lg"
+            disabled={creating}
           >
-            <Plus className="w-5 h-5 mr-2" />
-            New Project
+            {creating ? (
+              <>
+                <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Plus className="w-5 h-5 mr-2" />
+                New Project
+              </>
+            )}
           </Button>
         </div>
 
@@ -154,7 +254,7 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {projects.length === 0 && (
+        {projects.length === 0 && !error && (
           <div className="text-center py-12">
             <FolderOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-xl font-semibold mb-2">No projects yet</h3>
@@ -164,9 +264,19 @@ const Dashboard = () => {
             <Button
               onClick={handleNewProject}
               className="rounded-full bg-primary hover:bg-primary/90"
+              disabled={creating}
             >
-              <Plus className="w-5 h-5 mr-2" />
-              Create First Project
+              {creating ? (
+                <>
+                  <div className="w-5 h-5 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create First Project
+                </>
+              )}
             </Button>
           </div>
         )}
