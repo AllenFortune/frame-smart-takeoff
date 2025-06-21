@@ -1,21 +1,56 @@
 
 import { AppNavbar } from "@/components/AppNavbar";
+import { InteractiveCanvas } from "@/components/InteractiveCanvas";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, AlertTriangle, ArrowRight } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
+import { useProjectData } from "@/hooks/useProjectData";
+import { useState } from "react";
 
 const ProjectReview = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { pages, overlays, loading } = useProjectData(id!);
+  const [selectedOverlay, setSelectedOverlay] = useState<string | null>(null);
 
+  // Mock detections for now - in real app would come from overlays
   const detections = [
     { id: 1, type: "2x4 Stud", qty: 145, status: "verified" },
     { id: 2, type: "2x6 Plate", qty: 28, status: "verified" },
     { id: 3, type: "2x10 Header", qty: 12, status: "flagged" },
     { id: 4, type: "Shear Panel", qty: 8, status: "verified" },
   ];
+
+  // Get the current page and overlay
+  const currentPage = pages[0]; // For demo, use first page
+  const currentOverlay = overlays.find(o => o.page_id === currentPage?.id);
+
+  const handlePolygonClick = (featureId: string) => {
+    setSelectedOverlay(featureId);
+  };
+
+  const handlePolygonToggle = (featureId: string, included: boolean) => {
+    console.log('Toggle polygon:', featureId, included);
+    // In real app, would update the overlay data
+  };
+
+  const handleGeojsonUpdate = (geojson: any) => {
+    console.log('Update geojson:', geojson);
+    // In real app, would save the updated overlay
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="flex items-center justify-center py-12">
+          <span>Loading project data...</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -30,16 +65,16 @@ const ProjectReview = () => {
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2">
-            <Card className="rounded-2xl shadow-lg h-96">
-              <CardContent className="p-6 h-full flex items-center justify-center">
-                <div className="text-center text-muted-foreground">
-                  <div className="w-full h-64 bg-muted rounded-lg mb-4 flex items-center justify-center">
-                    Interactive Plan Canvas
-                  </div>
-                  <p>Click on detected items to review or modify quantities</p>
-                </div>
-              </CardContent>
-            </Card>
+            {currentPage?.img_url && (
+              <InteractiveCanvas
+                imageUrl={currentPage.img_url}
+                geojson={currentOverlay?.geojson}
+                onPolygonClick={handlePolygonClick}
+                onPolygonToggle={handlePolygonToggle}
+                onGeojsonUpdate={handleGeojsonUpdate}
+                className="h-full"
+              />
+            )}
           </div>
 
           <div className="space-y-6">

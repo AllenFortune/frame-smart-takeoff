@@ -1,48 +1,74 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { AppNavbar } from '@/components/AppNavbar';
-import { PageGrid } from '@/components/PageGrid';
+import { MobileOptimizedPageGrid } from '@/components/MobileOptimizedPageGrid';
+import { ProgressIndicator } from '@/components/ProgressIndicator';
+import { useProjectData } from '@/hooks/useProjectData';
+import { useJobPolling } from '@/hooks/useJobPolling';
 import { useToast } from '@/hooks/use-toast';
+import { extractSummary } from '@/utils/edgeFunctions';
 
 const ProjectPages = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  
+  const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
+  const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
+  
+  const { pages, loading } = useProjectData(id!);
+  const { currentJob, cancelJob } = useJobPolling({ 
+    projectId: id,
+    jobType: 'extract_summary'
+  });
 
-  const handleContinue = async (selectedPages: string[]) => {
+  const handlePageToggle = (pageId: string) => {
+    const newSelected = new Set(selectedPages);
+    if (newSelected.has(pageId)) {
+      newSelected.delete(pageId);
+    } else {
+      newSelected.add(pageId);
+    }
+    setSelectedPages(newSelected);
+  };
+
+  const handleSelectAllRelevant = () => {
+    const relevant = pages
+      .filter(page => page.confidence >= confidenceThreshold[0])
+      .map(page => page.id);
+    setSelectedPages(new Set(relevant));
+  };
+
+  const handleContinue = async (selectedPageIds: string[]) => {
     if (!id) return;
 
     try {
-      // Trigger summary extraction for selected pages
-      const response = await fetch(`${process.env.SUPABASE_URL}/functions/v1/extract-summary`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.SUPABASE_ANON_KEY}`
-        },
-        body: JSON.stringify({
-          projectId: id,
-          pageIds: selectedPages
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to extract summary');
-      }
+      await extractSummary(id, selectedPageIds);
 
       toast({
-        title: "Success",
-        description: "Page analysis complete. Proceeding to specs..."
+        title: "Analysis Started",
+        description: "Page analysis is running in the background..."
       });
 
+      // Navigate immediately, job polling will handle progress
       navigate(`/project/${id}/specs`);
     } catch (error) {
-      console.error('Error extracting summary:', error);
+      console.error('Error starting summary extraction:', error);
       toast({
         title: "Error",
-        description: "Failed to analyze selected pages. Please try again.",
+        description: "Failed to start page analysis. Please try again.",
         variant: "destructive"
+      });
+    }
+  };
+
+  const handleCancelJob = () => {
+    if (currentJob) {
+      cancelJob(currentJob.id);
+      toast({
+        title: "Job Cancelled",
+        description: "Page analysis has been cancelled."
       });
     }
   };
@@ -54,8 +80,28 @@ const ProjectPages = () => {
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
-      <main className="container mx-auto px-4 py-8">
-        <PageGrid projectId={id} onContinue={handleContinue} />
+      <main className="pb-20 sm:pb-8"> {/* Extra padding for mobile bottom nav */}
+        {/* Progress Indicator */}
+        {currentJob && (
+          <div className="container mx-auto px-4 pt-4">
+            <ProgressIndicator 
+              job={currentJob}
+              onCancel={handleCancelJob}
+            />
+          </div>
+        )}
+
+        {/* Page Grid */}
+        <MobileOptimizedPageGrid
+          pages={pages}
+          selectedPages={selectedPages}
+          confidenceThreshold={confidenceThreshold}
+          loading={loading}
+          onPageToggle={handlePageToggle}
+          onConfidenceChange={setConfidenceThreshold}
+          onSelectAllRelevant={handleSelectAllRelevant}
+          onContinue={handleContinue}
+        />
       </main>
     </div>
   );
