@@ -1,5 +1,5 @@
 
-import { FileText, AlertCircle, RefreshCcw } from "lucide-react";
+import { FileText, AlertCircle, RefreshCcw, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface PlaceholderImageProps {
@@ -20,17 +20,18 @@ export const PlaceholderImage = ({
       {error ? (
         <>
           <AlertCircle className="w-8 h-8 text-red-400 mb-2" />
-          <p className="text-sm text-gray-500 mb-2">Failed to load image</p>
+          <p className="text-sm text-gray-500 mb-1 text-center">Image failed to load</p>
+          <p className="text-xs text-gray-400 mb-2 text-center">Check storage bucket permissions</p>
           {onRetry && (
-            <Button variant="outline" size="sm" onClick={onRetry}>
-              <RefreshCcw className="w-4 h-4 mr-1" />
+            <Button variant="outline" size="sm" onClick={onRetry} className="text-xs">
+              <RefreshCcw className="w-3 h-3 mr-1" />
               Retry
             </Button>
           )}
         </>
       ) : (
         <>
-          <FileText className="w-8 h-8 text-gray-400 mb-2" />
+          <Image className="w-8 h-8 text-gray-400 mb-2" />
           <p className="text-sm text-gray-500">Page {pageNo}</p>
           <p className="text-xs text-gray-400">Processing...</p>
         </>

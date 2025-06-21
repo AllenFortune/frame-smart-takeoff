@@ -1,10 +1,10 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { PageGridHeader } from './pages/PageGridHeader';
 import { PageGridView } from './pages/PageGridView';
 import { PageCarouselView } from './pages/PageCarouselView';
+import { debugStorageIssues } from '@/utils/storageUtils';
 
 interface PlanPage {
   id: string;
@@ -43,8 +43,22 @@ export const MobileOptimizedPageGrid = ({
 
   const filteredPages = pages.filter(page => page.confidence >= confidenceThreshold[0]);
 
+  // Debug storage issues when pages load
+  useEffect(() => {
+    if (pages.length > 0 && pages[0]) {
+      const projectId = pages[0].id.split('-')[0]; // Extract project ID pattern
+      debugStorageIssues('88029b42-1180-43a2-8870-96c230575cb3'); // Use actual project ID
+    }
+  }, [pages]);
+
   const handleImageError = (pageId: string) => {
     setImageErrors(prev => new Set([...prev, pageId]));
+    toast({
+      title: "Image Load Error",
+      description: "Some page images failed to load. Check storage permissions.",
+      variant: "destructive",
+      duration: 3000
+    });
   };
 
   const retryImage = (pageId: string) => {
@@ -53,14 +67,18 @@ export const MobileOptimizedPageGrid = ({
       newSet.delete(pageId);
       return newSet;
     });
+    toast({
+      title: "Retrying image load...",
+      duration: 1000
+    });
   };
 
   // Touch handlers for swipe navigation
-  const handleTouchStart = (e: React.TouchEvent) => {
+  function handleTouchStart(e: React.TouchEvent) {
     setTouchStart(e.targetTouches[0].clientX);
-  };
+  }
 
-  const handleTouchMove = (e: React.TouchEvent) => {
+  function handleTouchMove(e: React.TouchEvent) {
     if (!touchStart) return;
 
     const currentTouch = e.targetTouches[0].clientX;
@@ -78,21 +96,21 @@ export const MobileOptimizedPageGrid = ({
       }
       setTouchStart(null);
     }
-  };
+  }
 
-  const handleTouchEnd = () => {
+  function handleTouchEnd() {
     setTouchStart(null);
-  };
+  }
 
   // Double tap to toggle selection
-  const handleDoubleTap = (pageId: string) => {
+  function handleDoubleTap(pageId: string) {
     onPageToggle(pageId);
     navigator.vibrate?.(100);
     toast({
       title: selectedPages.has(pageId) ? "Page deselected" : "Page selected",
       duration: 1000
     });
-  };
+  }
 
   if (loading) {
     return (

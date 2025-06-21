@@ -64,11 +64,13 @@ serve(async (req) => {
       .update({ progress: 50, current_step: 'Extracting pages from PDF' })
       .eq('id', jobData.id)
 
-    // For now, we'll simulate PDF processing since we don't have PyMuPDF in Deno
-    // In a production environment, you'd use a PDF processing library or service
+    // Use PDF-lib to extract page count and create images
+    const { PDFDocument } = await import('https://cdn.skypack.dev/pdf-lib@^1.17.1')
     
-    // Simulate extracting pages and create mock page images
-    const numPages = Math.floor(Math.random() * 5) + 1 // 1-5 pages
+    const pdfDoc = await PDFDocument.load(pdfArrayBuffer)
+    const numPages = pdfDoc.getPageCount()
+    console.log(`PDF has ${numPages} pages`)
+    
     const extractedPages = []
 
     for (let pageNo = 1; pageNo <= numPages; pageNo++) {
@@ -82,22 +84,36 @@ serve(async (req) => {
         })
         .eq('id', jobData.id)
 
-      // Create a simple placeholder image (1x1 transparent PNG)
-      const placeholderImage = new Uint8Array([
-        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-        0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x04, 0x00,
-        0x08, 0x06, 0x00, 0x00, 0x00, 0x56, 0x28, 0x30, 0x9C, 0x00, 0x00, 0x00,
-        0x0B, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x60, 0x00, 0x02, 0x00,
-        0x00, 0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00,
-        0x49, 0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82
-      ])
+      // Create a single-page PDF for this page
+      const singlePageDoc = await PDFDocument.create()
+      const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNo - 1])
+      singlePageDoc.addPage(copiedPage)
+      
+      // Convert to bytes
+      const pdfBytes = await singlePageDoc.save()
+      
+      // For now, we'll create a simple placeholder image since we don't have image conversion
+      // In production, you'd use a service like Puppeteer or similar to convert PDF page to image
+      const placeholderSvg = `
+        <svg width="600" height="800" xmlns="http://www.w3.org/2000/svg">
+          <rect width="100%" height="100%" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+          <text x="50%" y="50%" text-anchor="middle" font-family="Arial" font-size="24" fill="#6c757d">
+            Page ${pageNo}
+          </text>
+          <text x="50%" y="60%" text-anchor="middle" font-family="Arial" font-size="16" fill="#6c757d">
+            PDF Content
+          </text>
+        </svg>
+      `
+      
+      const svgBytes = new TextEncoder().encode(placeholderSvg)
 
       // Upload page image to storage
-      const imagePath = `${projectId}/page_${pageNo}.png`
+      const imagePath = `${projectId}/page_${pageNo}.svg`
       const { error: uploadError } = await supabaseClient.storage
         .from('plan-images')
-        .upload(imagePath, placeholderImage, {
-          contentType: 'image/png',
+        .upload(imagePath, svgBytes, {
+          contentType: 'image/svg+xml',
           upsert: true
         })
 
@@ -112,7 +128,7 @@ serve(async (req) => {
         .getPublicUrl(imagePath)
 
       // Simulate AI classification with realistic classes and confidence scores
-      const pageClasses = ['Floor_Plan', 'Wall_Section', 'Roof_Plan', 'Foundation_Plan', 'Electrical_Plan']
+      const pageClasses = ['floor_plan', 'wall_section', 'roof_plan', 'foundation_plan', 'electrical_plan']
       const randomClass = pageClasses[Math.floor(Math.random() * pageClasses.length)]
       const confidence = 0.7 + Math.random() * 0.3 // 70-100% confidence
 
