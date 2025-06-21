@@ -50,6 +50,7 @@ serve(async (req) => {
       .eq('id', jobData.id)
 
     // Download the PDF
+    console.log('Downloading PDF from:', pdfUrl)
     const pdfResponse = await fetch(pdfUrl)
     if (!pdfResponse.ok) {
       throw new Error(`Failed to download PDF: ${pdfResponse.statusText}`)
@@ -73,6 +74,18 @@ serve(async (req) => {
     
     const extractedPages = []
 
+    // First, clean up any existing pages for this project to avoid duplicates
+    console.log('Cleaning up existing pages for project:', projectId)
+    const { error: deleteError } = await supabaseClient
+      .from('plan_pages')
+      .delete()
+      .eq('project_id', projectId)
+
+    if (deleteError) {
+      console.error('Error cleaning up existing pages:', deleteError)
+      // Continue anyway - this is not critical
+    }
+
     for (let pageNo = 1; pageNo <= numPages; pageNo++) {
       // Update progress for each page
       const pageProgress = 50 + Math.floor((pageNo / numPages) * 30)
@@ -84,6 +97,8 @@ serve(async (req) => {
         })
         .eq('id', jobData.id)
 
+      console.log(`Processing page ${pageNo}/${numPages}`)
+
       // Create a single-page PDF for this page
       const singlePageDoc = await PDFDocument.create()
       const [copiedPage] = await singlePageDoc.copyPages(pdfDoc, [pageNo - 1])
@@ -92,46 +107,62 @@ serve(async (req) => {
       // Convert to bytes
       const pdfBytes = await singlePageDoc.save()
       
-      // Create a valid 1×1 transparent PNG placeholder
-      const placeholderBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/wIAAgMBApU3G0sAAAAASUVORK5CYII="
-      const placeholderImage = Uint8Array.from(
-        atob(placeholderBase64), c => c.charCodeAt(0)
-      )
+      // Create a better placeholder - a simple 800x1000 white PNG with page number
+      const createPlaceholderImage = (pageNumber: number) => {
+        // Create a simple SVG that we'll convert to PNG-like data
+        const svgContent = `
+          <svg width="800" height="1000" xmlns="http://www.w3.org/2000/svg">
+            <rect width="800" height="1000" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+            <text x="400" y="500" font-family="Arial, sans-serif" font-size="48" fill="#6c757d" text-anchor="middle">Page ${pageNumber}</text>
+            <text x="400" y="560" font-family="Arial, sans-serif" font-size="24" fill="#adb5bd" text-anchor="middle">Plan Sheet</text>
+          </svg>
+        `;
+        return new TextEncoder().encode(svgContent);
+      };
 
-      // Upload page image to storage
+      const placeholderImage = createPlaceholderImage(pageNo);
+
+      // Upload page image to storage with proper error handling
       const imagePath = `${projectId}/page_${pageNo}.png`
+      console.log(`Uploading page ${pageNo} to storage path:`, imagePath)
+      
       const { error: uploadError } = await supabaseClient.storage
         .from('plan-images')
         .upload(imagePath, placeholderImage, {
-          contentType: 'image/png',
+          contentType: 'image/svg+xml',
           upsert: true
         })
 
       if (uploadError) {
-        console.error('Error uploading page image:', uploadError)
+        console.error(`Error uploading page ${pageNo} image:`, uploadError)
         // Continue processing other pages even if one fails
+      } else {
+        console.log(`Successfully uploaded page ${pageNo}`)
       }
 
-      // Create signed URL with 24-hour TTL instead of public URL
+      // Create signed URL with proper 24-hour TTL
       const { data: signedData, error: signError } = await supabaseClient.storage
         .from('plan-images')
-        .createSignedUrl(imagePath, 60 * 60 * 24) // 24 hours
+        .createSignedUrl(imagePath, 24 * 60 * 60) // 24 hours in seconds
 
       if (signError) {
-        console.error('Error creating signed URL:', signError)
-        throw signError
+        console.error(`Error creating signed URL for page ${pageNo}:`, signError)
+        // Continue with null URL rather than failing completely
       }
 
+      const signedUrl = signedData?.signedUrl || null;
+      console.log(`Created signed URL for page ${pageNo}:`, signedUrl ? 'Success' : 'Failed')
+
       // Simulate AI classification with realistic classes and confidence scores
-      const pageClasses = ['floor_plan', 'wall_section', 'roof_plan', 'foundation_plan', 'electrical_plan']
+      const pageClasses = ['floor_plan', 'wall_section', 'roof_plan', 'foundation_plan', 'electrical_plan', 'structural_plan', 'site_plan']
       const randomClass = pageClasses[Math.floor(Math.random() * pageClasses.length)]
-      const confidence = 0.7 + Math.random() * 0.3 // 70-100% confidence
+      const confidence = 0.6 + Math.random() * 0.4 // 60-100% confidence
 
       extractedPages.push({
         page_no: pageNo,
         class: randomClass,
         confidence: confidence,
-        img_url: signedData.signedUrl // Store signed URL instead of public URL
+        img_url: signedUrl
       })
     }
 
@@ -141,7 +172,9 @@ serve(async (req) => {
       .update({ progress: 80, current_step: 'Saving page data to database' })
       .eq('id', jobData.id)
 
-    // Insert pages into database
+    console.log(`Inserting ${extractedPages.length} pages into database`)
+
+    // Insert pages into database with proper error handling
     const { data, error } = await supabaseClient
       .from('plan_pages')
       .insert(extractedPages.map(page => ({
@@ -166,6 +199,8 @@ serve(async (req) => {
       throw error
     }
 
+    console.log(`Successfully inserted ${data.length} pages`)
+
     // Update job to completed
     await supabaseClient
       .from('job_status')
@@ -174,7 +209,11 @@ serve(async (req) => {
         progress: 100,
         current_step: 'Classification complete',
         completed_at: new Date().toISOString(),
-        result_data: { pages_created: data.length }
+        result_data: { 
+          pages_created: data.length,
+          project_id: projectId,
+          total_pages: numPages
+        }
       })
       .eq('id', jobData.id)
 
@@ -196,7 +235,10 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in classify-pages:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        details: 'Check edge function logs for more details'
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

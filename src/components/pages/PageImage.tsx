@@ -1,8 +1,9 @@
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
-import { AlertCircle } from 'lucide-react';
-import { refreshSignedUrl } from '@/lib/storage';
+import { AlertCircle, RefreshCw } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { refreshSignedUrl, isSignedUrlExpired, checkImageHealth, retryWithExponentialBackoff } from '@/lib/storage';
 
 interface PlanPage {
   id: string;
@@ -30,77 +31,150 @@ export const PageImage = ({
 }: PageImageProps) => {
   const [imageLoading, setImageLoading] = useState(true);
   const [currentUrl, setCurrentUrl] = useState(page.img_url);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  
   const hasError = imageErrors.has(page.id);
+  const maxRetries = 3;
 
-  // Check if the image URL looks valid
-  const isValidImageUrl = currentUrl && 
-    (currentUrl.includes('supabase') || currentUrl.startsWith('http'));
+  // Validate if URL looks like a proper image URL
+  const isValidImageUrl = useCallback((url: string | null): boolean => {
+    if (!url) return false;
+    
+    // Check if it's a Supabase URL with proper format
+    const isSupabaseUrl = url.includes('supabase') || url.includes('localhost');
+    const hasImageExtension = /\.(png|jpg|jpeg|gif|svg|webp)(\?|$)/i.test(url);
+    const hasToken = url.includes('token=');
+    
+    return isSupabaseUrl && (hasImageExtension || hasToken);
+  }, []);
 
-  const handleImageLoad = () => {
-    console.log(`Image loaded successfully for page ${page.page_no}: ${currentUrl}`);
-    setImageLoading(false);
+  // Check URL health and refresh if needed
+  useEffect(() => {
+    const checkAndRefreshUrl = async () => {
+      if (!currentUrl || !projectId) return;
+      
+      console.log(`Checking URL health for page ${page.page_no}:`, currentUrl);
+      
+      // Check if URL is expired
+      if (isSignedUrlExpired(currentUrl)) {
+        console.log(`URL expired for page ${page.page_no}, refreshing...`);
+        await handleUrlRefresh();
+        return;
+      }
+      
+      // Check if URL is accessible
+      const isHealthy = await checkImageHealth(currentUrl);
+      if (!isHealthy && retryCount < maxRetries) {
+        console.log(`URL not healthy for page ${page.page_no}, attempting refresh...`);
+        await handleUrlRefresh();
+      }
+    };
+    
+    if (currentUrl && !hasError) {
+      checkAndRefreshUrl();
+    }
+  }, [currentUrl, projectId, page.page_no, hasError, retryCount]);
+
+  const handleUrlRefresh = async () => {
+    if (!projectId || isRefreshing) return;
+    
+    setIsRefreshing(true);
+    
+    try {
+      console.log(`Refreshing signed URL for page ${page.page_no}`);
+      
+      const freshUrl = await retryWithExponentialBackoff(
+        () => refreshSignedUrl(projectId, page.page_no),
+        2,
+        500
+      );
+      
+      setCurrentUrl(freshUrl);
+      setRetryCount(prev => prev + 1);
+      
+      console.log(`Successfully refreshed URL for page ${page.page_no}`);
+      
+      // Clear any existing errors since we have a fresh URL
+      if (hasError) {
+        onRetryImage(page.id);
+      }
+      
+    } catch (error) {
+      console.error(`Failed to refresh URL for page ${page.page_no}:`, error);
+      
+      if (retryCount >= maxRetries) {
+        console.error(`Max retries exceeded for page ${page.page_no}`);
+        onImageError(page.id);
+      }
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
-  const handleImageError = async (e: React.SyntheticEvent<HTMLImageElement>) => {
+  const handleImageLoad = useCallback(() => {
+    console.log(`Image loaded successfully for page ${page.page_no}`);
+    setImageLoading(false);
+    setRetryCount(0); // Reset retry count on successful load
+  }, [page.page_no]);
+
+  const handleImageError = useCallback(async (e: React.SyntheticEvent<HTMLImageElement>) => {
     console.error(`Image failed to load for page ${page.page_no}:`, {
       url: currentUrl,
-      error: e,
       naturalWidth: (e.target as HTMLImageElement).naturalWidth,
-      naturalHeight: (e.target as HTMLImageElement).naturalHeight
+      naturalHeight: (e.target as HTMLImageElement).naturalHeight,
+      retryCount
     });
     
-    // Try to refresh the signed URL if we have a project ID
-    if (projectId && currentUrl) {
-      try {
-        console.log(`Attempting to refresh signed URL for page ${page.page_no}`);
-        const freshUrl = await refreshSignedUrl(projectId, page.page_no);
-        setCurrentUrl(freshUrl);
-        console.log(`Refreshed URL for page ${page.page_no}: ${freshUrl}`);
-        return; // Don't set error state, let it retry with the new URL
-      } catch (refreshError) {
-        console.error(`Failed to refresh URL for page ${page.page_no}:`, refreshError);
-      }
-    }
-    
-    // Try to access the image directly to get more info
-    if (currentUrl) {
-      fetch(currentUrl, { method: 'HEAD' })
-        .then(response => {
-          console.log(`HEAD request for page ${page.page_no} image:`, {
-            status: response.status,
-            statusText: response.statusText,
-            contentType: response.headers.get('content-type'),
-            contentLength: response.headers.get('content-length')
-          });
-        })
-        .catch(fetchError => {
-          console.error(`HEAD request failed for page ${page.page_no}:`, fetchError);
-        });
-    }
-    
     setImageLoading(false);
-    onImageError(page.id);
+    
+    // If we haven't hit max retries, try to refresh the URL
+    if (retryCount < maxRetries && projectId && !isRefreshing) {
+      console.log(`Attempting URL refresh for page ${page.page_no} (attempt ${retryCount + 1})`);
+      await handleUrlRefresh();
+    } else {
+      // Mark as error if we've exhausted retries
+      onImageError(page.id);
+    }
+  }, [currentUrl, page.page_no, page.id, retryCount, projectId, isRefreshing, onImageError]);
+
+  const handleManualRetry = () => {
+    console.log(`Manual retry requested for page ${page.page_no}`);
+    setRetryCount(0);
+    onRetryImage(page.id);
+    
+    if (projectId) {
+      handleUrlRefresh();
+    }
   };
 
-  // Show placeholder if no URL, invalid URL, or has error
-  if (!currentUrl || !isValidImageUrl || hasError) {
+  // Show placeholder if no URL, invalid URL, has error, or exceeded retries
+  if (!currentUrl || !isValidImageUrl(currentUrl) || (hasError && retryCount >= maxRetries)) {
     return (
       <PlaceholderImage
         pageNo={page.page_no}
         className="w-full h-full"
-        error={hasError || (!currentUrl || !isValidImageUrl)}
-        onRetry={() => onRetryImage(page.id)}
+        error={hasError || !isValidImageUrl(currentUrl)}
+        onRetry={handleManualRetry}
       />
     );
   }
 
   return (
     <div className="w-full h-full relative">
-      {imageLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+      {/* Loading spinner */}
+      {(imageLoading || isRefreshing) && (
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
+          <div className="flex flex-col items-center gap-2">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            <span className="text-xs text-muted-foreground">
+              {isRefreshing ? 'Refreshing...' : 'Loading...'}
+            </span>
+          </div>
         </div>
       )}
+      
+      {/* Main image */}
       <img 
         src={currentUrl} 
         alt={`Page ${page.page_no}`}
@@ -108,11 +182,31 @@ export const PageImage = ({
         loading="lazy"
         onLoad={handleImageLoad}
         onError={handleImageError}
-        style={{ display: imageLoading ? 'none' : 'block' }}
+        style={{ display: (imageLoading || isRefreshing) ? 'none' : 'block' }}
       />
+      
+      {/* Error indicator and retry button */}
       {hasError && (
-        <div className="absolute top-2 right-2">
+        <div className="absolute top-2 right-2 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-500" />
+          {projectId && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleManualRetry}
+              disabled={isRefreshing}
+              className="h-6 px-2 text-xs"
+            >
+              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+        </div>
+      )}
+      
+      {/* Retry count indicator (for debugging) */}
+      {retryCount > 0 && (
+        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-1 rounded">
+          Retry {retryCount}/{maxRetries}
         </div>
       )}
     </div>

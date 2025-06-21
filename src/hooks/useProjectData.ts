@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { refreshSignedUrl, isSignedUrlExpired } from '@/lib/storage';
@@ -63,6 +62,8 @@ export const useProjectData = (projectId: string) => {
     try {
       setLoading(true);
       setError(null);
+      
+      console.log('Fetching project data for:', projectId);
 
       // Fetch project
       const { data: projectData, error: projectError } = await supabase
@@ -73,9 +74,9 @@ export const useProjectData = (projectId: string) => {
 
       if (projectError) throw projectError;
       setProject(projectData);
+      console.log('Fetched project:', projectData?.name);
 
-      // Fetch pages - get only the most recent entry per page number
-      // This handles duplicate entries by selecting the latest created_at for each page_no
+      // Fetch pages - get only the most recent entry per page number to handle duplicates
       const { data: pagesData, error: pagesError } = await supabase
         .from('plan_pages')
         .select('*')
@@ -90,10 +91,8 @@ export const useProjectData = (projectId: string) => {
         pagesData.reduce((acc: PlanPage[], current: PlanPage) => {
           const existingPageIndex = acc.findIndex(page => page.page_no === current.page_no);
           if (existingPageIndex === -1) {
-            // No existing page with this page_no, add it
             acc.push(current);
           } else {
-            // Compare creation dates and keep the more recent one
             const existingPage = acc[existingPageIndex];
             if (new Date(current.created_at) > new Date(existingPage.created_at)) {
               acc[existingPageIndex] = current;
@@ -104,35 +103,29 @@ export const useProjectData = (projectId: string) => {
 
       console.log(`Fetched ${pagesData?.length || 0} total page entries, deduped to ${uniquePages.length} unique pages`);
 
-      // Refresh expired signed URLs
-      const pagesWithFreshUrls = await Promise.all(
+      // Process URLs - refresh expired ones in background
+      const pagesWithValidUrls = await Promise.all(
         uniquePages.map(async (page) => {
-          if (page.img_url && isSignedUrlExpired(page.img_url)) {
-            console.log(`Refreshing expired URL for page ${page.page_no}`);
-            try {
-              const freshUrl = await refreshSignedUrl(projectId, page.page_no);
-              return { ...page, img_url: freshUrl };
-            } catch (error) {
-              console.error(`Failed to refresh URL for page ${page.page_no}:`, error);
-              return page;
-            }
+          if (!page.img_url) {
+            console.log(`Page ${page.page_no} has no image URL`);
+            return page;
           }
+
+          // Check if URL is expired
+          if (isSignedUrlExpired(page.img_url)) {
+            console.log(`URL expired for page ${page.page_no}, will refresh on demand`);
+            // Don't refresh here to avoid blocking the UI - let PageImage component handle it
+          } else {
+            console.log(`Page ${page.page_no} has valid URL`);
+          }
+
           return page;
         })
       );
 
-      setPages(pagesWithFreshUrls);
+      setPages(pagesWithValidUrls);
 
-      // Debug: Log image URLs to check their format
-      pagesWithFreshUrls.forEach(page => {
-        if (page.img_url) {
-          console.log(`Page ${page.page_no} image URL: ${page.img_url}`);
-        } else {
-          console.log(`Page ${page.page_no} has no image URL`);
-        }
-      });
-
-      // Fetch summary with proper type handling
+      // Fetch summary
       const { data: summaryData, error: summaryError } = await supabase
         .from('plan_summaries')
         .select('*')
@@ -141,7 +134,6 @@ export const useProjectData = (projectId: string) => {
 
       if (summaryError) throw summaryError;
       
-      // Transform the summary data to match our interface
       if (summaryData) {
         const transformedSummary: PlanSummary = {
           ...summaryData,
@@ -150,11 +142,12 @@ export const useProjectData = (projectId: string) => {
             : {}
         };
         setSummary(transformedSummary);
+        console.log('Fetched project summary');
       }
 
       // Fetch overlays
-      if (pagesWithFreshUrls?.length) {
-        const pageIds = pagesWithFreshUrls.map(p => p.id);
+      if (pagesWithValidUrls?.length) {
+        const pageIds = pagesWithValidUrls.map(p => p.id);
         const { data: overlaysData, error: overlaysError } = await supabase
           .from('plan_overlays')
           .select('*')
@@ -162,6 +155,7 @@ export const useProjectData = (projectId: string) => {
 
         if (overlaysError) throw overlaysError;
         setOverlays(overlaysData || []);
+        console.log(`Fetched ${overlaysData?.length || 0} overlays`);
       }
 
     } catch (err) {
@@ -173,6 +167,7 @@ export const useProjectData = (projectId: string) => {
   };
 
   const refreshData = () => {
+    console.log('Refreshing project data...');
     fetchProjectData();
   };
 
