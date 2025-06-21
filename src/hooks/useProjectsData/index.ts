@@ -1,68 +1,21 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase, healthCheck, checkNetworkConnectivity } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-
-interface Project {
-  id: string;
-  name: string;
-  owner: string;
-  created_at: string;
-  updated_at: string;
-  sheet_count: number;
-}
-
-interface UseProjectsDataReturn {
-  projects: Project[];
-  loading: boolean;
-  error: string | null;
-  isOnline: boolean;
-  retryCount: number;
-  retry: () => void;
-  refetch: () => void;
-  deleteProject: (projectId: string) => Promise<void>;
-  deletingProjects: Set<string>;
-}
-
-const MAX_RETRIES = 3;
-const RETRY_DELAY_BASE = 1000; // 1 second base delay
+import { Project, UseProjectsDataReturn } from './types';
+import { MAX_RETRIES, RETRY_DELAY_BASE } from './constants';
+import { useNetworkMonitor } from './networkMonitor';
+import { fetchProjectsWithRetry } from './projectsFetcher';
+import { deleteProjectById } from './projectDeleter';
 
 export const useProjectsData = (userId: string | undefined): UseProjectsDataReturn => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState(checkNetworkConnectivity());
   const [retryCount, setRetryCount] = useState(0);
   const [deletingProjects, setDeletingProjects] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const abortControllerRef = useRef<AbortController | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Monitor network connectivity
-  useEffect(() => {
-    const handleOnline = () => {
-      console.log('Network: Back online');
-      setIsOnline(true);
-      if (error && userId) {
-        console.log('Network: Attempting to refetch data after reconnection');
-        fetchProjects();
-      }
-    };
-
-    const handleOffline = () => {
-      console.log('Network: Gone offline');
-      setIsOnline(false);
-      setError('No internet connection');
-    };
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, [error, userId]);
 
   const fetchProjects = useCallback(async (retryAttempt = 0) => {
     if (!userId) {
@@ -87,74 +40,19 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
     const signal = abortControllerRef.current.signal;
 
     try {
-      console.log(`useProjectsData: Fetching projects for user ${userId} (attempt ${retryAttempt + 1})`);
       setError(null);
       
       if (retryAttempt === 0) {
         setLoading(true);
       }
 
-      // Check network connectivity first
-      if (!checkNetworkConnectivity()) {
-        throw new Error('No internet connection');
-      }
-
-      // Perform health check on first attempt
-      if (retryAttempt === 0) {
-        console.log('useProjectsData: Performing health check...');
-        const isHealthy = await healthCheck();
-        if (!isHealthy) {
-          throw new Error('Supabase service unavailable');
-        }
-        console.log('useProjectsData: Health check passed');
-      }
-
-      // Set up request timeout
-      const timeoutPromise = new Promise((_, reject) => {
-        timeoutRef.current = setTimeout(() => {
-          reject(new Error('Request timeout'));
-        }, 10000); // 10 second timeout
-      });
-
-      // Make the actual request with timeout - now including sheet count
-      const requestPromise = supabase
-        .from('projects')
-        .select(`
-          *,
-          sheet_count:plan_pages(count)
-        `)
-        .eq('owner', userId)
-        .order('created_at', { ascending: false })
-        .abortSignal(signal);
-
-      const { data, error: supabaseError } = await Promise.race([
-        requestPromise,
-        timeoutPromise
-      ]) as any;
-
-      // Clear timeout if request completed
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
-
+      const data = await fetchProjectsWithRetry(userId, retryAttempt, signal);
+      
       if (signal.aborted) {
-        console.log('useProjectsData: Request was aborted');
         return;
       }
 
-      if (supabaseError) {
-        console.error('useProjectsData: Supabase error:', supabaseError);
-        throw new Error(`Database error: ${supabaseError.message}`);
-      }
-
-      // Transform the data to flatten the sheet_count
-      const transformedData = data?.map((project: any) => ({
-        ...project,
-        sheet_count: project.sheet_count?.[0]?.count || 0
-      })) || [];
-
-      console.log(`useProjectsData: Successfully fetched ${transformedData?.length || 0} projects`);
-      setProjects(transformedData);
+      setProjects(data);
       setRetryCount(0); // Reset retry count on success
       
       if (retryAttempt > 0) {
@@ -165,7 +63,7 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
       }
 
     } catch (err) {
-      if (signal.aborted) {
+      if (abortControllerRef.current?.signal.aborted) {
         console.log('useProjectsData: Request was aborted, ignoring error');
         return;
       }
@@ -201,6 +99,15 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
     }
   }, [userId, toast]);
 
+  const handleReconnect = useCallback(() => {
+    if (error && userId) {
+      console.log('Network: Attempting to refetch data after reconnection');
+      fetchProjects();
+    }
+  }, [error, userId, fetchProjects]);
+
+  const isOnline = useNetworkMonitor(handleReconnect);
+
   const deleteProject = useCallback(async (projectId: string) => {
     if (!userId) {
       console.log('deleteProject: No user ID provided');
@@ -216,20 +123,7 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
     setDeletingProjects(prev => new Set(prev).add(projectId));
     
     try {
-      console.log(`deleteProject: Deleting project ${projectId} for user ${userId}`);
-      
-      const { error: deleteError } = await supabase
-        .from('projects')
-        .delete()
-        .eq('id', projectId)
-        .eq('owner', userId); // Extra safety check
-
-      if (deleteError) {
-        console.error('deleteProject: Supabase error:', deleteError);
-        throw new Error(`Failed to delete project: ${deleteError.message}`);
-      }
-
-      console.log('deleteProject: Successfully deleted project:', projectId);
+      await deleteProjectById(projectId, userId);
       
       // Remove project from local state immediately
       setProjects(prev => prev.filter(project => project.id !== projectId));
@@ -298,3 +192,5 @@ export const useProjectsData = (userId: string | undefined): UseProjectsDataRetu
     deletingProjects
   };
 };
+
+export type { Project, UseProjectsDataReturn };
