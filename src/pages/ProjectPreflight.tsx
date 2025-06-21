@@ -2,28 +2,30 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle, FileText, ArrowRight } from "lucide-react";
+import { AlertTriangle, CheckCircle, FileText, ArrowRight, ArrowLeft, Home } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
+import { useProjectData } from "@/hooks/useProjectData";
+import { 
+  Breadcrumb,
+  BreadcrumbList,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbSeparator,
+  BreadcrumbPage
+} from "@/components/ui/breadcrumb";
 
 const ProjectPreflight = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { project, pages, loading, error } = useProjectData(id!);
 
-  const planSheets = [
-    { id: 1, name: "Foundation Plan", type: "Foundation", scale: "1/4\" = 1'", status: "ok" },
-    { id: 2, name: "First Floor Plan", type: "Floor Plan", scale: "1/4\" = 1'", status: "ok" },
-    { id: 3, name: "Second Floor Plan", type: "Floor Plan", scale: "1/4\" = 1'", status: "ok" },
-    { id: 4, name: "Roof Plan", type: "Roof", scale: "1/4\" = 1'", status: "ok" },
-    { id: 5, name: "Elevations", type: "Elevation", scale: "1/4\" = 1'", status: "warning" },
-    { id: 6, name: "Sections", type: "Section", scale: "1/4\" = 1'", status: "ok" },
-    { id: 7, name: "Details", type: "Detail", scale: "Various", status: "warning" },
-  ];
-
-  const alerts = [
-    "Scale reference missing on Sheet 5 (Elevations)",
-    "Some text may be too small to read clearly on Sheet 7 (Details)",
-  ];
+  const getPageStatus = (page: any) => {
+    // Simple logic to determine page status based on confidence
+    if (page.confidence >= 0.8) return "ok";
+    if (page.confidence >= 0.5) return "warning";
+    return "error";
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status) {
@@ -47,11 +49,127 @@ const ProjectPreflight = () => {
     }
   };
 
+  const getPageTypeName = (className: string) => {
+    switch (className.toLowerCase()) {
+      case 'foundation':
+        return 'Foundation Plan';
+      case 'floor':
+        return 'Floor Plan';
+      case 'roof':
+        return 'Roof Plan';
+      case 'elevation':
+        return 'Elevations';
+      case 'section':
+        return 'Sections';
+      case 'detail':
+        return 'Details';
+      default:
+        return className;
+    }
+  };
+
+  // Generate alerts based on actual page data
+  const generateAlerts = () => {
+    const alerts = [];
+    pages.forEach(page => {
+      const status = getPageStatus(page);
+      if (status === 'warning') {
+        alerts.push(`Low confidence (${Math.round(page.confidence * 100)}%) on ${getPageTypeName(page.class)}`);
+      } else if (status === 'error') {
+        alerts.push(`Very low confidence (${Math.round(page.confidence * 100)}%) on ${getPageTypeName(page.class)} - may need review`);
+      }
+    });
+    return alerts;
+  };
+
+  const alerts = generateAlerts();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading project data...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-red-600">Error Loading Project</h3>
+            <p className="text-muted-foreground mb-6">{error}</p>
+            <div className="flex gap-4 justify-center">
+              <Button onClick={() => window.location.reload()} variant="outline">
+                Retry
+              </Button>
+              <Button onClick={() => navigate('/dashboard')}>
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
       <div className="container mx-auto px-4 py-8">
         <div className="max-w-4xl mx-auto">
+          {/* Navigation Header */}
+          <div className="mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    <BreadcrumbLink onClick={() => navigate('/dashboard')} className="cursor-pointer">
+                      Dashboard
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbLink onClick={() => navigate(`/project/${id}/pages`)} className="cursor-pointer">
+                      {project?.name || 'Project'}
+                    </BreadcrumbLink>
+                  </BreadcrumbItem>
+                  <BreadcrumbSeparator />
+                  <BreadcrumbItem>
+                    <BreadcrumbPage>Pre-flight Scan</BreadcrumbPage>
+                  </BreadcrumbItem>
+                </BreadcrumbList>
+              </Breadcrumb>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate('/dashboard')}
+                >
+                  <Home className="w-4 h-4 mr-2" />
+                  Dashboard
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => navigate(`/project/${id}/pages`)}
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" />
+                  Back to Pages
+                </Button>
+              </div>
+            </div>
+          </div>
+
           <div className="mb-8">
             <h1 className="text-3xl font-bold text-foreground mb-2">Pre-flight Scan</h1>
             <p className="text-muted-foreground">
@@ -65,27 +183,44 @@ const ProjectPreflight = () => {
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <FileText className="w-6 h-6 text-primary" />
-                    <span>Detected Plan Sheets ({planSheets.length})</span>
+                    <span>Detected Plan Sheets ({pages.length})</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {planSheets.map((sheet) => (
-                    <div
-                      key={sheet.id}
-                      className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
-                    >
-                      <div className="flex items-center space-x-3">
-                        {getStatusIcon(sheet.status)}
-                        <div>
-                          <h4 className="font-medium">{sheet.name}</h4>
-                          <p className="text-sm text-muted-foreground">
-                            {sheet.type} • Scale: {sheet.scale}
-                          </p>
-                        </div>
-                      </div>
-                      {getStatusBadge(sheet.status)}
+                  {pages.length === 0 ? (
+                    <div className="text-center py-8">
+                      <FileText className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">No plan sheets detected yet.</p>
+                      <Button 
+                        variant="outline" 
+                        className="mt-4"
+                        onClick={() => navigate(`/project/${id}/upload`)}
+                      >
+                        Upload Plans
+                      </Button>
                     </div>
-                  ))}
+                  ) : (
+                    pages.map((page) => {
+                      const status = getPageStatus(page);
+                      return (
+                        <div
+                          key={page.id}
+                          className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
+                        >
+                          <div className="flex items-center space-x-3">
+                            {getStatusIcon(status)}
+                            <div>
+                              <h4 className="font-medium">{getPageTypeName(page.class)}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                Page {page.page_no} • Confidence: {Math.round(page.confidence * 100)}%
+                              </p>
+                            </div>
+                          </div>
+                          {getStatusBadge(status)}
+                        </div>
+                      );
+                    })
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -99,13 +234,13 @@ const ProjectPreflight = () => {
                   <div className="grid grid-cols-2 gap-4 text-center">
                     <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
                       <div className="text-2xl font-bold text-green-600">
-                        {planSheets.filter(s => s.status === 'ok').length}
+                        {pages.filter(p => getPageStatus(p) === 'ok').length}
                       </div>
                       <div className="text-sm text-green-600">Ready</div>
                     </div>
                     <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
                       <div className="text-2xl font-bold text-yellow-600">
-                        {planSheets.filter(s => s.status === 'warning').length}
+                        {pages.filter(p => getPageStatus(p) === 'warning').length}
                       </div>
                       <div className="text-sm text-yellow-600">Warnings</div>
                     </div>
@@ -136,6 +271,7 @@ const ProjectPreflight = () => {
                 onClick={() => navigate(`/project/${id}/specs`)}
                 className="w-full rounded-full bg-primary hover:bg-primary/90"
                 size="lg"
+                disabled={pages.length === 0}
               >
                 Continue to Specs
                 <ArrowRight className="w-5 h-5 ml-2" />
