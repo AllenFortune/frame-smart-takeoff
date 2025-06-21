@@ -22,8 +22,24 @@ export async function ensureSignedUrl(path: string, ttlSeconds?: number): Promis
   return data.signedUrl;
 }
 
+export function isPublicUrl(url: string): boolean {
+  if (!url) return false;
+  
+  // Check if URL is from Supabase storage and is public (doesn't contain token parameter)
+  const isSupabaseUrl = url.includes('supabase.co/storage/v1/object/public/');
+  const hasToken = url.includes('token=');
+  
+  return isSupabaseUrl && !hasToken;
+}
+
 export function isSignedUrlExpired(url: string): boolean {
   if (!url) return true;
+  
+  // Public URLs don't expire
+  if (isPublicUrl(url)) {
+    console.log('URL is public, never expires:', url.substring(0, 50) + '...');
+    return false;
+  }
   
   // Check if URL contains token parameter (signed URLs have this)
   const hasToken = url.includes('token=');

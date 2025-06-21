@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { InteractiveCanvas } from "@/components/InteractiveCanvas";
 import { PlanPage } from "@/hooks/useProjectData";
 import { AlertCircle, FileText } from "lucide-react";
-import { isSignedUrlExpired } from "@/lib/storage";
+import { isSignedUrlExpired, isPublicUrl } from "@/lib/storage";
 
 interface WizardCanvasProps {
   currentPage?: PlanPage;
@@ -12,7 +12,7 @@ interface WizardCanvasProps {
 
 export const WizardCanvas = ({ currentPage, currentOverlay }: WizardCanvasProps) => {
   const hasValidImage = currentPage?.img_url && 
-    !isSignedUrlExpired(currentPage.img_url) && 
+    (isPublicUrl(currentPage.img_url) || !isSignedUrlExpired(currentPage.img_url)) && 
     currentPage.class !== 'upload_failed';
   
   return (

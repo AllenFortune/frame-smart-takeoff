@@ -1,6 +1,6 @@
 
 import { useState, useEffect, useCallback } from 'react';
-import { refreshSignedUrl, isSignedUrlExpired } from '@/lib/storage';
+import { refreshSignedUrl, isSignedUrlExpired, isPublicUrl } from '@/lib/storage';
 
 interface PlanPage {
   id: string;
@@ -64,15 +64,21 @@ export const useMultiResolutionImage = ({
     setIsLoading(!!bestUrl);
   }, [page, preferredResolution, getBestUrl]);
 
-  // Refresh expired signed URLs
+  // Refresh expired signed URLs (skip for public URLs)
   const refreshUrl = useCallback(async () => {
     if (!projectId || !currentUrl || isRefreshing) return;
+
+    // Don't try to refresh public URLs - they don't expire
+    if (isPublicUrl(currentUrl)) {
+      console.log(`Skipping refresh for public URL: ${currentUrl.substring(0, 50)}...`);
+      return;
+    }
 
     setIsRefreshing(true);
     try {
       console.log(`Refreshing URL for page ${page.page_no}, resolution: ${currentResolution}`);
       
-      // For now, use existing refresh logic - TODO: enhance for multi-resolution
+      // For signed URLs, use existing refresh logic
       const freshUrl = await refreshSignedUrl(projectId, page.page_no);
       setCurrentUrl(freshUrl);
       setError(null);
@@ -97,8 +103,8 @@ export const useMultiResolutionImage = ({
   const handleImageError = useCallback(async () => {
     setIsLoading(false);
     
-    // Check if URL is expired and try to refresh
-    if (currentUrl && isSignedUrlExpired(currentUrl) && projectId) {
+    // Check if URL is expired and try to refresh (only for signed URLs)
+    if (currentUrl && isSignedUrlExpired(currentUrl) && projectId && !isPublicUrl(currentUrl)) {
       await refreshUrl();
     } else {
       const errorMsg = `Failed to load ${currentResolution} image`;
