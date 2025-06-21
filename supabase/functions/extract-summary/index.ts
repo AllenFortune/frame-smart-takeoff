@@ -24,7 +24,7 @@ serve(async (req) => {
     // In real implementation, this would analyze the selected page images
     const mockSummary = {
       wall_height_ft: 9,
-      num_stories: 2,
+      num_stories: 2,  
       shear_wall_tags: ['SW1', 'SW2', 'SW3'],
       nailing_table_refs: ['Table 2304.9.1', 'Table 2304.9.3'],
       general_notes: [
@@ -34,16 +34,23 @@ serve(async (req) => {
       ]
     }
 
-    // Upsert summary into database
+    // Use upsert to either create new summary or update existing one
     const { data, error } = await supabaseClient
       .from('plan_summaries')
-      .upsert({
-        project_id: projectId,
-        summary_json: mockSummary
-      })
+      .upsert(
+        {
+          project_id: projectId,
+          summary_json: mockSummary,
+          updated_at: new Date().toISOString()
+        },
+        {
+          onConflict: 'project_id'
+        }
+      )
       .select()
 
     if (error) {
+      console.error('Database error in extract-summary:', error)
       throw error
     }
 
@@ -64,7 +71,11 @@ serve(async (req) => {
   } catch (error) {
     console.error('Error in extract-summary:', error)
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ 
+        error: error.message,
+        error_code: 'extraction_failed',
+        hint: 'The summary extraction process encountered an error. This may be due to duplicate data or processing issues.'
+      }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 400,

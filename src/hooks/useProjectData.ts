@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { refreshSignedUrl, isSignedUrlExpired } from '@/lib/storage';
@@ -20,6 +21,9 @@ export interface PlanPage {
   thumbnail_url: string | null;
   preview_url: string | null;
   full_url: string | null;
+  sheet_number?: string | null;
+  plan_type?: string | null;
+  description?: string | null;
   created_at: string;
 }
 
