@@ -1,10 +1,10 @@
 
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React from 'react';
 import { CanvasToolbar } from './canvas/CanvasToolbar';
-import { CanvasDrawing, CanvasDrawingRef } from './canvas/CanvasDrawing';
+import { CanvasContainer } from './canvas/CanvasContainer';
 import { FeatureInfoPanel } from './canvas/FeatureInfoPanel';
-import { GeoJsonData, Tool, CanvasState } from './canvas/types';
-import { getCanvasCoordinates, isPointInPolygon, fitImageToContainer } from './canvas/utils';
+import { GeoJsonData } from './canvas/types';
+import { useCanvasState } from '@/hooks/useCanvasState';
 
 interface InteractiveCanvasProps {
   imageUrl: string;
@@ -23,157 +23,15 @@ export const InteractiveCanvas = ({
   onGeojsonUpdate,
   className = ''
 }: InteractiveCanvasProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
-  const canvasDrawingRef = useRef<CanvasDrawingRef>(null);
-  
-  const [state, setState] = useState<CanvasState>({
-    selectedFeature: null,
-    activeTool: 'select',
-    imageLoaded: false,
-    scale: 1,
-    pan: { x: 0, y: 0 },
-    isDragging: false,
-    dragStart: { x: 0, y: 0 },
-    isDrawing: false,
-    currentPath: [],
-    undoStack: [],
-    redoStack: []
-  });
-
-  // Load image and setup canvas when imageUrl changes
-  useEffect(() => {
-    if (!imageUrl) {
-      console.log('No image URL provided to InteractiveCanvas');
-      return;
-    }
-
-    console.log('Loading image:', imageUrl);
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    
-    img.onload = () => {
-      console.log('Image loaded successfully:', img.width, 'x', img.height);
-      imageRef.current = img;
-      setState(prev => ({ ...prev, imageLoaded: true }));
-      
-      // Set up canvas dimensions and scale
-      const canvas = canvasDrawingRef.current?.getCanvas();
-      const container = containerRef.current;
-      
-      if (canvas && container) {
-        // Set canvas size to match image
-        canvas.width = img.width;
-        canvas.height = img.height;
-        
-        // Calculate scale to fit container while maintaining aspect ratio
-        const containerWidth = container.clientWidth || 800;
-        const containerHeight = Math.min(container.clientHeight || 600, 600);
-        
-        const scaleX = containerWidth / img.width;
-        const scaleY = containerHeight / img.height;
-        const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond original size
-        
-        setState(prev => ({ ...prev, scale: newScale }));
-        console.log('Canvas setup complete, scale:', newScale);
-      }
-    };
-    
-    img.onerror = (error) => {
-      console.error('Failed to load image:', imageUrl, error);
-      setState(prev => ({ ...prev, imageLoaded: false }));
-    };
-    
-    img.src = imageUrl;
-  }, [imageUrl]);
-
-  // Draw canvas when dependencies change
-  useEffect(() => {
-    if (state.imageLoaded) {
-      canvasDrawingRef.current?.drawCanvas();
-    }
-  }, [geojson, state.selectedFeature, state.activeTool, state.isDrawing, state.currentPath, state.imageLoaded]);
-
-  // Handle canvas interactions
-  const handleCanvasMouseDown = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    const canvas = canvasDrawingRef.current?.getCanvas();
-    if (!canvas) return;
-
-    const coords = getCanvasCoordinates(event, canvas);
-
-    if (state.activeTool === 'pan') {
-      setState(prev => ({
-        ...prev,
-        isDragging: true,
-        dragStart: coords
-      }));
-      return;
-    }
-
-    if (state.activeTool === 'polygon') {
-      if (!state.isDrawing) {
-        setState(prev => ({
-          ...prev,
-          isDrawing: true,
-          currentPath: [[coords.x, coords.y]]
-        }));
-      } else {
-        setState(prev => ({
-          ...prev,
-          currentPath: [...prev.currentPath, [coords.x, coords.y]]
-        }));
-      }
-      return;
-    }
-
-    if (state.activeTool === 'select' && geojson?.features) {
-      // Check for polygon click
-      for (const feature of geojson.features) {
-        const polygonCoords = feature.geometry.coordinates[0];
-        if (isPointInPolygon([coords.x, coords.y], polygonCoords)) {
-          setState(prev => ({ ...prev, selectedFeature: feature.properties.id }));
-          onPolygonClick?.(feature.properties.id);
-          return;
-        }
-      }
-      setState(prev => ({ ...prev, selectedFeature: null }));
-    }
-  };
-
-  // Tool handlers
-  const handleToolChange = (tool: Tool) => {
-    setState(prev => ({ ...prev, activeTool: tool }));
-  };
-
-  const handleZoomIn = () => {
-    setState(prev => ({ ...prev, scale: Math.min(prev.scale * 1.2, 3) }));
-  };
-
-  const handleZoomOut = () => {
-    setState(prev => ({ ...prev, scale: Math.max(prev.scale / 1.2, 0.1) }));
-  };
-
-  const handleUndo = () => {
-    if (state.undoStack.length === 0) return;
-    const previous = state.undoStack[state.undoStack.length - 1];
-    setState(prev => ({
-      ...prev,
-      redoStack: [...prev.redoStack, geojson!],
-      undoStack: prev.undoStack.slice(0, -1)
-    }));
-    onGeojsonUpdate?.(previous);
-  };
-
-  const handleRedo = () => {
-    if (state.redoStack.length === 0) return;
-    const next = state.redoStack[state.redoStack.length - 1];
-    setState(prev => ({
-      ...prev,
-      undoStack: [...prev.undoStack, geojson!],
-      redoStack: prev.redoStack.slice(0, -1)
-    }));
-    onGeojsonUpdate?.(next);
-  };
+  const {
+    state,
+    updateState,
+    handleToolChange,
+    handleZoomIn,
+    handleZoomOut,
+    handleUndo,
+    handleRedo
+  } = useCanvasState();
 
   const handleToggleInclusion = (featureId: string, included: boolean) => {
     onPolygonToggle?.(featureId, included);
@@ -229,30 +87,18 @@ export const InteractiveCanvas = ({
         onToolChange={handleToolChange}
         onZoomIn={handleZoomIn}
         onZoomOut={handleZoomOut}
-        onUndo={handleUndo}
-        onRedo={handleRedo}
+        onUndo={() => handleUndo(geojson, onGeojsonUpdate)}
+        onRedo={() => handleRedo(geojson, onGeojsonUpdate)}
       />
 
       {/* Canvas Container */}
-      <div 
-        ref={containerRef}
-        className="border rounded-lg overflow-hidden bg-gray-100 relative touch-pan-x touch-pan-y"
-        style={{ minHeight: '400px', maxHeight: '70vh' }}
-      >
-        <CanvasDrawing
-          ref={canvasDrawingRef}
-          imageRef={imageRef}
-          geojson={geojson}
-          selectedFeature={state.selectedFeature}
-          activeTool={state.activeTool}
-          isDrawing={state.isDrawing}
-          currentPath={state.currentPath}
-          scale={state.scale}
-          pan={state.pan}
-          imageLoaded={state.imageLoaded}
-          onCanvasMouseDown={handleCanvasMouseDown}
-        />
-      </div>
+      <CanvasContainer
+        imageUrl={imageUrl}
+        geojson={geojson}
+        state={state}
+        onStateUpdate={updateState}
+        onPolygonClick={onPolygonClick}
+      />
 
       {/* Selected Feature Info */}
       {selectedFeatureData && (
