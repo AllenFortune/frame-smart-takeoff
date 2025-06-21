@@ -75,6 +75,7 @@ serve(async (req) => {
       let data;
       try {
         data = await databaseManager.insertPages(projectId, extractedPages);
+        console.log(`Successfully inserted ${data.length} pages into database`);
       } catch (error) {
         await jobManager.markJobFailed(jobData.id, `Database insert failed: ${error.message}`);
         return createErrorResponse(
@@ -87,15 +88,30 @@ serve(async (req) => {
       // Update job progress - generating thumbnails
       await jobManager.updateJobProgress(jobData.id, 80, 'Generating enhanced thumbnails');
 
-      // Generate thumbnails
+      // Generate thumbnails for all pages
+      console.log('Starting thumbnail generation for all pages...');
       const thumbnailResult = await thumbnailService.generateThumbnails(projectId, pdfUrl);
       
       let thumbnailMessage = '';
       if (thumbnailResult.success) {
         if (thumbnailResult.data.fromCache) {
           thumbnailMessage = ' Used cached high-quality thumbnails.';
+          console.log('Used cached thumbnails');
         } else {
-          thumbnailMessage = ` Generated ${thumbnailResult.data.results?.length || 0} high-quality thumbnails.`;
+          const resultsCount = thumbnailResult.data.results?.length || 0;
+          thumbnailMessage = ` Generated ${resultsCount} high-quality thumbnails.`;
+          console.log(`Generated ${resultsCount} new thumbnails`);
+          
+          // Log individual page results for debugging
+          if (thumbnailResult.data.results) {
+            thumbnailResult.data.results.forEach((result: any) => {
+              if (result.error) {
+                console.error(`Thumbnail generation failed for page ${result.pageNo}:`, result.error);
+              } else {
+                console.log(`Successfully generated thumbnails for page ${result.pageNo}:`, result.urls);
+              }
+            });
+          }
         }
       } else {
         thumbnailMessage = ' Thumbnail generation failed, using fallback images.';
@@ -108,13 +124,14 @@ serve(async (req) => {
         project_id: projectId,
         total_pages: extractedPages.length,
         thumbnail_generation: thumbnailResult.success ? 'success' : 'failed',
-        thumbnail_details: thumbnailResult.data
+        thumbnail_details: thumbnailResult.data,
+        thumbnail_error: thumbnailResult.success ? null : thumbnailResult.error
       };
 
       await jobManager.markJobCompleted(jobData.id, resultData);
 
       const responseMessage = `Successfully classified ${extractedPages.length} pages.${thumbnailMessage}`;
-      console.log(`Successfully classified ${extractedPages.length} pages for project ${projectId}`);
+      console.log(`Classification completed for project ${projectId}: ${responseMessage}`);
 
       return createSuccessResponse({ 
         success: true, 
@@ -122,10 +139,12 @@ serve(async (req) => {
         jobId: jobData.id,
         message: responseMessage,
         thumbnailGeneration: thumbnailResult.success,
-        enhancedThumbnails: true
+        enhancedThumbnails: true,
+        thumbnailDetails: thumbnailResult.data
       });
 
     } catch (error) {
+      console.error('Error during PDF processing:', error);
       await jobManager.markJobFailed(jobData.id, `Processing failed: ${error.message}`);
       throw error;
     }

@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
@@ -164,6 +165,41 @@ const checkThumbnailCache = async (
   }
 };
 
+// Ensure storage bucket exists
+const ensureBucketExists = async (supabaseClient: any): Promise<void> => {
+  try {
+    console.log('Checking if plan-images bucket exists...');
+    
+    const { data: buckets, error: listError } = await supabaseClient.storage.listBuckets();
+    
+    if (listError) {
+      console.error('Error listing buckets:', listError);
+      return;
+    }
+    
+    const bucketExists = buckets?.some((bucket: any) => bucket.name === 'plan-images');
+    
+    if (!bucketExists) {
+      console.log('Creating plan-images bucket...');
+      const { error: createError } = await supabaseClient.storage.createBucket('plan-images', {
+        public: true,
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/webp'],
+        fileSizeLimit: 10485760 // 10MB
+      });
+      
+      if (createError) {
+        console.error('Error creating bucket:', createError);
+      } else {
+        console.log('Successfully created plan-images bucket');
+      }
+    } else {
+      console.log('plan-images bucket already exists');
+    }
+  } catch (error) {
+    console.error('Error ensuring bucket exists:', error);
+  }
+};
+
 // Upload multi-resolution images to storage
 const uploadMultiResolutionImages = async (
   supabaseClient: any,
@@ -172,6 +208,9 @@ const uploadMultiResolutionImages = async (
   thumbnails: { [key: string]: { data: Uint8Array, dimensions: { w: number, h: number } } }
 ): Promise<{ [key: string]: string }> => {
   const urls: { [key: string]: string } = {};
+  
+  // Ensure bucket exists before uploading
+  await ensureBucketExists(supabaseClient);
   
   for (const [resolution, thumbnail] of Object.entries(thumbnails)) {
     try {
@@ -197,7 +236,7 @@ const uploadMultiResolutionImages = async (
       
       if (publicUrlData?.publicUrl) {
         urls[resolution] = publicUrlData.publicUrl;
-        console.log(`Successfully uploaded ${resolution}`);
+        console.log(`Successfully uploaded ${resolution}: ${publicUrlData.publicUrl}`);
       } else {
         console.error(`Failed to get public URL for ${resolution}`);
       }
@@ -337,13 +376,15 @@ serve(async (req) => {
         // Upload all resolutions
         const urls = await uploadMultiResolutionImages(supabaseClient, projectId, page.page_no, thumbnails);
         
-        // Update page record with new URLs
+        // Update page record with new URLs - this is the critical fix
         const updateData: any = {};
         if (urls.thumbnail) updateData.thumbnail_url = urls.thumbnail;
         if (urls.preview) updateData.preview_url = urls.preview;
         if (urls.full) updateData.full_url = urls.full;
         // Keep the original img_url for backward compatibility
         if (urls.preview) updateData.img_url = urls.preview;
+        
+        console.log(`Updating page ${page.page_no} with URLs:`, updateData);
         
         const { error: updateError } = await supabaseClient
           .from('plan_pages')
@@ -352,6 +393,8 @@ serve(async (req) => {
         
         if (updateError) {
           console.error(`Error updating page ${page.page_no}:`, updateError);
+        } else {
+          console.log(`Successfully updated page ${page.page_no} with new URLs`);
         }
         
         // Store metadata
@@ -362,7 +405,8 @@ serve(async (req) => {
           pageId: page.id,
           pageNo: page.page_no,
           urls: urls,
-          generationTime: generationTime
+          generationTime: generationTime,
+          success: true
         });
         
         console.log(`Successfully processed page ${page.page_no} in ${generationTime}ms`);
@@ -371,7 +415,8 @@ serve(async (req) => {
         results.push({
           pageId: page.id,
           pageNo: page.page_no,
-          error: error.message
+          error: error.message,
+          success: false
         });
       }
     }
@@ -387,7 +432,8 @@ serve(async (req) => {
           metadata: { 
             pages_processed: results.length,
             total_pages: numPages,
-            generated_at: new Date().toISOString()
+            generated_at: new Date().toISOString(),
+            successful_pages: results.filter(r => r.success).length
           }
         });
       console.log('Created cache entry');
@@ -395,14 +441,17 @@ serve(async (req) => {
       console.error('Failed to create cache entry:', cacheError);
     }
 
-    console.log(`Thumbnail generation completed. Processed ${results.length} pages`);
+    const successfulResults = results.filter(r => r.success);
+    console.log(`Thumbnail generation completed. Successfully processed ${successfulResults.length}/${results.length} pages`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         results: results,
-        message: `Generated thumbnails for ${results.length} pages`,
-        pdfHash: pdfHash
+        message: `Generated thumbnails for ${successfulResults.length}/${results.length} pages`,
+        pdfHash: pdfHash,
+        successCount: successfulResults.length,
+        totalCount: results.length
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
