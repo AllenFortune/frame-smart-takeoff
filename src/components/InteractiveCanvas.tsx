@@ -68,7 +68,7 @@ export const InteractiveCanvas = ({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isDrawing, setIsDrawing] = useState(false);
-  const [currentPath, setCurrentPath] = useState<number[][]>([]);
+  const [currentPath, setCurrentPath] = useState<[number, number][]>([]);
   const [undoStack, setUndoStack] = useState<GeoJsonData[]>([]);
   const [redoStack, setRedoStack] = useState<GeoJsonData[]>([]);
 
@@ -212,7 +212,7 @@ export const InteractiveCanvas = ({
     if (activeTool === 'polygon') {
       if (!isDrawing) {
         setIsDrawing(true);
-        setCurrentPath([coords.x, coords.y]);
+        setCurrentPath([[coords.x, coords.y]]);
       } else {
         setCurrentPath(prev => [...prev, [coords.x, coords.y]]);
       }
@@ -234,7 +234,7 @@ export const InteractiveCanvas = ({
   };
 
   // Point in polygon test
-  const isPointInPolygon = (point: number[], polygon: number[][]) => {
+  const isPointInPolygon = (point: [number, number], polygon: number[][]) => {
     const [x, y] = point;
     let inside = false;
 

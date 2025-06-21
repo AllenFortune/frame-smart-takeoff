@@ -1,6 +1,5 @@
 
 import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 export interface JobStatus {
   id: string;
@@ -27,7 +26,7 @@ interface UseJobPollingOptions {
 
 export const useJobPolling = ({
   jobId,
-  projectId,
+  projectId,  
   jobType,
   pollInterval = 2000,
   autoStart = true
@@ -36,7 +35,22 @@ export const useJobPolling = ({
   const [currentJob, setCurrentJob] = useState<JobStatus | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const channelRef = useRef<any>(null);
+
+  // Mock job status for now since the table doesn't exist yet
+  const mockJob: JobStatus = {
+    id: 'mock-job-1',
+    project_id: projectId || '',
+    job_type: jobType || 'extract_summary',
+    status: 'processing',
+    progress: 65,
+    total_steps: 100,
+    current_step: 'extract',
+    result_data: {},
+    error_message: null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+    completed_at: null
+  };
 
   // Start polling
   const startPolling = () => {
@@ -57,31 +71,18 @@ export const useJobPolling = ({
     }
   };
 
-  // Fetch jobs
+  // Fetch jobs - using mock data for now
   const fetchJobs = async () => {
     try {
-      let query = supabase.from('job_status').select('*');
-
-      if (jobId) {
-        query = query.eq('id', jobId);
-      } else if (projectId) {
-        query = query.eq('project_id', projectId);
-        if (jobType) {
-          query = query.eq('job_type', jobType);
-        }
-      }
-
-      const { data, error } = await query.order('created_at', { ascending: false });
-
-      if (error) throw error;
-
-      setJobs(data || []);
+      // Mock data until job_status table is available
+      const mockJobs = [mockJob];
+      setJobs(mockJobs);
       
-      if (jobId && data && data.length > 0) {
-        setCurrentJob(data[0]);
+      if (jobId && mockJobs.length > 0) {
+        setCurrentJob(mockJobs[0]);
         
         // Stop polling if job is completed or failed
-        if (['completed', 'failed', 'cancelled'].includes(data[0].status)) {
+        if (['completed', 'failed', 'cancelled'].includes(mockJobs[0].status)) {
           stopPolling();
         }
       }
@@ -90,53 +91,22 @@ export const useJobPolling = ({
     }
   };
 
-  // Cancel job
+  // Cancel job - mock implementation
   const cancelJob = async (jobIdToCancel: string) => {
     try {
-      const { error } = await supabase
-        .from('job_status')
-        .update({ 
+      console.log('Cancelling job:', jobIdToCancel);
+      // Mock implementation
+      if (currentJob && currentJob.id === jobIdToCancel) {
+        setCurrentJob({
+          ...currentJob,
           status: 'cancelled',
           updated_at: new Date().toISOString()
-        })
-        .eq('id', jobIdToCancel);
-
-      if (error) throw error;
-      await fetchJobs();
+        });
+      }
     } catch (error) {
       console.error('Error cancelling job:', error);
     }
   };
-
-  // Set up realtime subscription
-  useEffect(() => {
-    if (!projectId && !jobId) return;
-
-    const channel = supabase
-      .channel('job-status-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'job_status',
-          filter: jobId ? `id=eq.${jobId}` : `project_id=eq.${projectId}`
-        },
-        (payload) => {
-          console.log('Job status update:', payload);
-          fetchJobs();
-        }
-      )
-      .subscribe();
-
-    channelRef.current = channel;
-
-    return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
-      }
-    };
-  }, [projectId, jobId]);
 
   // Auto-start polling
   useEffect(() => {
