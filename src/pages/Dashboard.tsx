@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderOpen, Calendar, DollarSign } from "lucide-react";
+import { Plus, FolderOpen, Calendar, DollarSign, AlertTriangle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,13 +25,14 @@ const Dashboard = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
-      console.log('Dashboard: User found, fetching projects for user:', user.id);
+      console.log('Dashboard: User authenticated, ID:', user.id);
       fetchProjects();
     } else {
-      console.log('Dashboard: No user found');
+      console.log('Dashboard: No authenticated user');
       setLoading(false);
     }
   }, [user]);
@@ -39,35 +40,44 @@ const Dashboard = () => {
   const fetchProjects = async () => {
     if (!user) {
       console.log('fetchProjects: No user available');
+      setError('User not authenticated');
+      setLoading(false);
       return;
     }
 
     try {
-      console.log('fetchProjects: Starting fetch for user:', user.id);
+      console.log('fetchProjects: Fetching projects for user:', user.id);
+      setError(null);
       
-      const { data, error } = await supabase
+      // First check if we can access the projects table at all
+      const { data, error, count } = await supabase
         .from('projects')
-        .select('*')
+        .select('*', { count: 'exact' })
         .eq('owner', user.id)
         .order('created_at', { ascending: false });
 
+      console.log('fetchProjects: Query result:', { data, error, count });
+
       if (error) {
-        console.error('fetchProjects: Error fetching projects:', error);
+        console.error('fetchProjects: Supabase error:', error);
+        setError(`Database error: ${error.message}`);
         toast({
-          title: "Error",
-          description: "Failed to load projects. Please try again.",
+          title: "Database Error",
+          description: `Failed to load projects: ${error.message}`,
           variant: "destructive",
         });
         return;
       }
 
-      console.log('fetchProjects: Successfully fetched projects:', data);
+      console.log('fetchProjects: Successfully fetched', data?.length || 0, 'projects');
       setProjects(data || []);
     } catch (error) {
       console.error('fetchProjects: Unexpected error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      setError(errorMessage);
       toast({
         title: "Error",
-        description: "An unexpected error occurred while loading projects.",
+        description: `An unexpected error occurred: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -79,7 +89,7 @@ const Dashboard = () => {
     if (!user) {
       console.log('handleNewProject: No user available');
       toast({
-        title: "Error",
+        title: "Authentication Required",
         description: "Please log in to create a project.",
         variant: "destructive",
       });
@@ -92,7 +102,7 @@ const Dashboard = () => {
     }
 
     setCreating(true);
-    console.log('handleNewProject: Starting project creation for user:', user.id);
+    console.log('handleNewProject: Creating project for user:', user.id);
     
     try {
       const projectName = `New Project ${new Date().toLocaleDateString()}`;
@@ -108,9 +118,9 @@ const Dashboard = () => {
         .single();
 
       if (error) {
-        console.error('handleNewProject: Error creating project:', error);
+        console.error('handleNewProject: Supabase error:', error);
         toast({
-          title: "Error",
+          title: "Creation Failed",
           description: `Failed to create project: ${error.message}`,
           variant: "destructive",
         });
@@ -124,14 +134,18 @@ const Dashboard = () => {
         description: "Project created successfully!",
       });
 
+      // Refresh projects list
+      await fetchProjects();
+
       // Navigate to upload page
       console.log('handleNewProject: Navigating to upload page for project:', data.id);
       navigate(`/project/${data.id}/upload`);
     } catch (error) {
       console.error('handleNewProject: Unexpected error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
       toast({
         title: "Error",
-        description: "An unexpected error occurred while creating the project.",
+        description: `An unexpected error occurred: ${errorMessage}`,
         variant: "destructive",
       });
     } finally {
@@ -152,12 +166,44 @@ const Dashboard = () => {
     }
   };
 
+  const handleRetry = () => {
+    setError(null);
+    fetchProjects();
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
         <AppNavbar />
         <div className="container mx-auto px-4 py-8 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-primary"></div>
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading projects...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8">
+          <div className="text-center max-w-md mx-auto">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h3 className="text-xl font-semibold mb-2 text-red-600">Failed to Load Projects</h3>
+            <p className="text-muted-foreground mb-6">{error}</p>
+            <div className="flex gap-4 justify-center">
+              <Button onClick={handleRetry} variant="outline">
+                Try Again
+              </Button>
+              <Button onClick={handleNewProject} disabled={creating}>
+                <Plus className="w-4 h-4 mr-2" />
+                {creating ? "Creating..." : "New Project"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -220,7 +266,7 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {projects.length === 0 && (
+        {projects.length === 0 && !error && (
           <div className="text-center py-12">
             <FolderOpen className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
             <h3 className="text-xl font-semibold mb-2">No projects yet</h3>
