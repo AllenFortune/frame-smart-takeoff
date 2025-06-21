@@ -1,9 +1,6 @@
 
 import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
-import { CloudUpload, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useToast } from "@/hooks/use-toast";
@@ -12,6 +9,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { classifyPages } from "@/utils/edgeFunctions";
 import { useJobPolling } from "@/hooks/useJobPolling";
 import { useUploadProgress } from "@/hooks/useUploadProgress";
+import { FileDropZone } from "@/components/upload/FileDropZone";
+import { FileList } from "@/components/upload/FileList";
+import { UploadProgress } from "@/components/upload/UploadProgress";
+import { UploadButton } from "@/components/upload/UploadButton";
 
 const ProjectUpload = () => {
   const { id } = useParams();
@@ -163,19 +164,6 @@ const ProjectUpload = () => {
     }
   };
 
-  const getProgressLabel = () => {
-    if (uploadProgress.uploading && uploadProgress.progress < 50) {
-      return "Uploading files...";
-    } else if (uploadProgress.processing) {
-      return "Processing and classifying pages...";
-    } else if (uploadProgress.completed) {
-      return "Complete!";
-    } else if (uploadProgress.error) {
-      return "Upload failed";
-    }
-    return "Ready to upload";
-  };
-
   const isUploading = uploadProgress.uploading || uploadProgress.processing;
 
   return (
@@ -192,107 +180,37 @@ const ProjectUpload = () => {
 
           <Card className="rounded-2xl shadow-lg p-6">
             <CardContent className="p-0">
-              <div
-                className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
-                  isUploading 
-                    ? "border-muted bg-muted/10" 
-                    : "border-primary/30 hover:border-primary/50"
-                }`}
+              <FileDropZone
+                files={files}
+                onFileSelect={handleFileSelect}
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
-              >
-                <CloudUpload className={`w-16 h-16 mx-auto mb-4 ${isUploading ? "text-muted-foreground" : "text-primary"}`} />
-                <h3 className="text-xl font-semibold mb-2">
-                  {isUploading ? "Processing..." : "Drag & drop your PDF plans"}
-                </h3>
-                <p className="text-muted-foreground mb-4">
-                  {isUploading ? "Please wait while we process your files" : "or click to browse files"}
-                </p>
-                <input
-                  type="file"
-                  multiple
-                  accept=".pdf"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                  id="file-upload"
-                  disabled={isUploading}
-                />
-                <Button
-                  variant="outline"
-                  className="rounded-full"
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                  disabled={isUploading}
-                >
-                  Browse files
-                </Button>
-              </div>
+                isUploading={isUploading}
+              />
 
-              {files.length > 0 && (
-                <div className="mt-6 space-y-3">
-                  <h4 className="font-medium">Selected files:</h4>
-                  {files.map((file, index) => (
-                    <div key={index} className="flex items-center space-x-3 p-3 bg-muted rounded-lg">
-                      <FileText className="w-5 h-5 text-primary" />
-                      <span className="flex-1 text-sm">{file.name}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {(file.size / 1024 / 1024).toFixed(1)} MB
-                      </span>
-                      {uploadProgress.completed && (
-                        <CheckCircle className="w-5 h-5 text-green-500" />
-                      )}
-                      {uploadProgress.error && (
-                        <AlertCircle className="w-5 h-5 text-red-500" />
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
+              <FileList
+                files={files}
+                uploadCompleted={uploadProgress.completed}
+                uploadError={uploadProgress.error}
+              />
 
-              {isUploading && (
-                <div className="mt-6 space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span>{getProgressLabel()}</span>
-                    <span>{uploadProgress.progress}%</span>
-                  </div>
-                  <Progress value={uploadProgress.progress} className="w-full" />
-                  {uploadProgress.processing && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
-                      Using AI to classify and analyze plan pages...
-                    </div>
-                  )}
-                </div>
-              )}
+              <UploadProgress
+                isUploading={isUploading}
+                progress={uploadProgress.progress}
+                uploading={uploadProgress.uploading}
+                processing={uploadProgress.processing}
+                completed={uploadProgress.completed}
+                error={uploadProgress.error}
+                onReset={uploadProgress.reset}
+              />
 
-              {uploadProgress.error && (
-                <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-                  <div className="flex items-center gap-2 text-red-700">
-                    <AlertCircle className="w-5 h-5" />
-                    <p className="text-sm font-medium">Upload Failed</p>
-                  </div>
-                  <p className="text-sm text-red-600 mt-1">{uploadProgress.error}</p>
-                  <Button
-                    onClick={uploadProgress.reset}
-                    variant="outline"
-                    size="sm"
-                    className="mt-2"
-                  >
-                    Try Again
-                  </Button>
-                </div>
-              )}
-
-              {files.length > 0 && !isUploading && !uploadProgress.completed && !uploadProgress.error && (
-                <div className="mt-6">
-                  <Button
-                    onClick={handleUpload}
-                    className="w-full rounded-full bg-primary hover:bg-primary/90"
-                    size="lg"
-                  >
-                    Upload & Process Plans
-                  </Button>
-                </div>
-              )}
+              <UploadButton
+                files={files}
+                isUploading={isUploading}
+                completed={uploadProgress.completed}
+                error={uploadProgress.error}
+                onUpload={handleUpload}
+              />
             </CardContent>
           </Card>
         </div>
