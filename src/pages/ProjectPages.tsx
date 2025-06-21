@@ -6,7 +6,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { AppNavbar } from '@/components/AppNavbar';
-import { MobileOptimizedPageGrid } from '@/components/MobileOptimizedPageGrid';
+import { PlanListSelector } from '@/components/wizard/PlanListSelector';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Slider } from "@/components/ui/slider";
 
 const ProjectPages = () => {
   const { id } = useParams();
@@ -48,10 +50,6 @@ const ProjectPages = () => {
     setSelectedPages(newSelected);
   };
 
-  const handleConfidenceChange = (threshold: number[]) => {
-    setConfidenceThreshold(threshold);
-  };
-
   const handleSelectAllRelevant = () => {
     const relevantPages = pages.filter(page => 
       page.confidence >= confidenceThreshold[0] && 
@@ -63,8 +61,8 @@ const ProjectPages = () => {
   const handleContinue = () => {
     if (selectedPages.size === 0) {
       toast({
-        title: "No Pages Selected",
-        description: "Please select at least one page to continue.",
+        title: "No Plans Selected",
+        description: "Please select at least one plan to continue.",
         variant: "destructive"
       });
       return;
@@ -88,7 +86,7 @@ const ProjectPages = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h1 className="text-3xl font-bold">Select Pages for Analysis</h1>
+            <h1 className="text-3xl font-bold">Select Plans for Analysis</h1>
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleBack}>
                 <ArrowLeft className="w-4 h-4 mr-2" />
@@ -97,21 +95,67 @@ const ProjectPages = () => {
             </div>
           </div>
           <p className="text-muted-foreground">
-            Choose which pages you want to include in the framing analysis. 
-            Pages are automatically classified and scored by confidence level.
+            Choose which plans you want to include in the framing analysis. 
+            Plans are automatically classified and organized by sheet number and type.
           </p>
         </div>
 
-        <MobileOptimizedPageGrid
-          pages={pages}
-          selectedPages={selectedPages}
-          confidenceThreshold={confidenceThreshold}
-          loading={loading}
-          onPageToggle={handlePageToggle}
-          onConfidenceChange={handleConfidenceChange}
-          onSelectAllRelevant={handleSelectAllRelevant}
-          onContinue={handleContinue}
-        />
+        {loading ? (
+          <Card className="rounded-2xl shadow-lg">
+            <CardContent className="p-8 text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+              <p className="text-muted-foreground">Loading plan information...</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-6">
+            <Card className="rounded-2xl shadow-lg">
+              <CardHeader>
+                <CardTitle className="text-lg">Plan Selection Controls</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium">
+                    Confidence Threshold: {Math.round(confidenceThreshold[0] * 100)}%
+                  </label>
+                  <Slider
+                    value={confidenceThreshold}
+                    onValueChange={setConfidenceThreshold}
+                    max={1}
+                    min={0.1}
+                    step={0.1}
+                    className="mt-2"
+                  />
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={handleSelectAllRelevant}
+                    className="flex-1"
+                  >
+                    Select All Relevant ({pages.filter(p => p.confidence >= confidenceThreshold[0] && p.class !== 'upload_failed').length})
+                  </Button>
+                  <Button 
+                    onClick={handleContinue}
+                    disabled={selectedPages.size === 0}
+                    className="flex-1"
+                  >
+                    Continue with Selected ({selectedPages.size})
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <PlanListSelector
+              pages={pages}
+              selectedPages={selectedPages}
+              confidenceThreshold={confidenceThreshold[0]}
+              onPageToggle={handlePageToggle}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

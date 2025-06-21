@@ -127,36 +127,45 @@ export type Database = {
           class: string
           confidence: number
           created_at: string
+          description: string | null
           full_url: string | null
           id: string
           img_url: string | null
           page_no: number
+          plan_type: string | null
           preview_url: string | null
           project_id: string
+          sheet_number: string | null
           thumbnail_url: string | null
         }
         Insert: {
           class: string
           confidence?: number
           created_at?: string
+          description?: string | null
           full_url?: string | null
           id?: string
           img_url?: string | null
           page_no: number
+          plan_type?: string | null
           preview_url?: string | null
           project_id: string
+          sheet_number?: string | null
           thumbnail_url?: string | null
         }
         Update: {
           class?: string
           confidence?: number
           created_at?: string
+          description?: string | null
           full_url?: string | null
           id?: string
           img_url?: string | null
           page_no?: number
+          plan_type?: string | null
           preview_url?: string | null
           project_id?: string
+          sheet_number?: string | null
           thumbnail_url?: string | null
         }
         Relationships: [

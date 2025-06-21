@@ -1,22 +1,12 @@
 
-export interface JobData {
-  id: string;
-  project_id: string;
-  job_type: string;
-  status: string;
-  progress: number;
-  total_steps: number;
-  current_step: string;
-}
-
 export interface ExtractedPage {
   page_no: number;
   class: string;
   confidence: number;
-  img_url: string | null;
-  thumbnail_url: string | null;
-  preview_url: string | null;
-  full_url: string | null;
+  img_url: string;
+  sheet_number?: string | null;
+  plan_type?: string | null;
+  description?: string | null;
 }
 
 export interface ThumbnailGenerationResult {
