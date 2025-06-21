@@ -41,33 +41,57 @@ export const InteractiveCanvas = ({
     redoStack: []
   });
 
-  // Load image
+  // Load image and setup canvas when imageUrl changes
   useEffect(() => {
+    if (!imageUrl) {
+      console.log('No image URL provided to InteractiveCanvas');
+      return;
+    }
+
+    console.log('Loading image:', imageUrl);
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    
     img.onload = () => {
+      console.log('Image loaded successfully:', img.width, 'x', img.height);
       imageRef.current = img;
       setState(prev => ({ ...prev, imageLoaded: true }));
-      handleFitImageToContainer();
+      
+      // Set up canvas dimensions and scale
+      const canvas = canvasDrawingRef.current?.getCanvas();
+      const container = containerRef.current;
+      
+      if (canvas && container) {
+        // Set canvas size to match image
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Calculate scale to fit container while maintaining aspect ratio
+        const containerWidth = container.clientWidth || 800;
+        const containerHeight = Math.min(container.clientHeight || 600, 600);
+        
+        const scaleX = containerWidth / img.width;
+        const scaleY = containerHeight / img.height;
+        const newScale = Math.min(scaleX, scaleY, 1); // Don't scale up beyond original size
+        
+        setState(prev => ({ ...prev, scale: newScale }));
+        console.log('Canvas setup complete, scale:', newScale);
+      }
     };
+    
+    img.onerror = (error) => {
+      console.error('Failed to load image:', imageUrl, error);
+      setState(prev => ({ ...prev, imageLoaded: false }));
+    };
+    
     img.src = imageUrl;
   }, [imageUrl]);
 
-  // Fit image to container
-  const handleFitImageToContainer = useCallback(() => {
-    const canvas = canvasDrawingRef.current?.getCanvas();
-    const container = containerRef.current;
-    const img = imageRef.current;
-    
-    if (!canvas || !container || !img) return;
-
-    const newScale = fitImageToContainer(canvas, container, img);
-    setState(prev => ({ ...prev, scale: newScale }));
-  }, []);
-
   // Draw canvas when dependencies change
   useEffect(() => {
-    canvasDrawingRef.current?.drawCanvas();
+    if (state.imageLoaded) {
+      canvasDrawingRef.current?.drawCanvas();
+    }
   }, [geojson, state.selectedFeature, state.activeTool, state.isDrawing, state.currentPath, state.imageLoaded]);
 
   // Handle canvas interactions
@@ -162,6 +186,38 @@ export const InteractiveCanvas = ({
 
   const selectedFeatureData = geojson?.features.find(f => f.properties.id === state.selectedFeature);
 
+  // Show loading state if image hasn't loaded yet
+  if (!state.imageLoaded && imageUrl) {
+    return (
+      <div className={`space-y-4 ${className}`}>
+        <div className="border rounded-lg overflow-hidden bg-gray-100 relative" style={{ minHeight: '400px' }}>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <div className="animate-spin w-8 h-8 border-2 border-primary border-t-transparent rounded-full mx-auto"></div>
+              <p className="text-muted-foreground">Loading plan sheet...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state if no image URL provided
+  if (!imageUrl) {
+    return (
+      <div className={`space-y-4 ${className}`}>
+        <div className="border rounded-lg overflow-hidden bg-gray-100 relative" style={{ minHeight: '400px' }}>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="text-center space-y-2">
+              <p className="text-muted-foreground">No plan sheet selected</p>
+              <p className="text-sm text-muted-foreground">Select a page to view the plan</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={`space-y-4 ${className}`}>
       {/* Toolbar */}
@@ -181,7 +237,7 @@ export const InteractiveCanvas = ({
       <div 
         ref={containerRef}
         className="border rounded-lg overflow-hidden bg-gray-100 relative touch-pan-x touch-pan-y"
-        style={{ minHeight: '400px' }}
+        style={{ minHeight: '400px', maxHeight: '70vh' }}
       >
         <CanvasDrawing
           ref={canvasDrawingRef}

@@ -46,7 +46,7 @@ export const CanvasDrawing = forwardRef<CanvasDrawingRef, CanvasDrawingProps>(({
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     // Draw image
-    ctx.drawImage(img, 0, 0);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     // Draw GeoJSON features
     if (geojson?.features) {
@@ -117,10 +117,12 @@ export const CanvasDrawing = forwardRef<CanvasDrawingRef, CanvasDrawingProps>(({
     <canvas
       ref={canvasRef}
       onMouseDown={onCanvasMouseDown}
-      className="cursor-crosshair touch-none"
+      className="cursor-crosshair touch-none w-full h-auto"
       style={{ 
         transform: `scale(${scale}) translate(${pan.x}px, ${pan.y}px)`,
-        transformOrigin: 'top left'
+        transformOrigin: 'top left',
+        maxWidth: '100%',
+        maxHeight: '100%'
       }}
     />
   );
