@@ -243,6 +243,44 @@ export type Database = {
         }
         Relationships: []
       }
+      wizard_progress: {
+        Row: {
+          active_step: string
+          created_at: string
+          id: string
+          project_id: string
+          step_data: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active_step?: string
+          created_at?: string
+          id?: string
+          project_id: string
+          step_data?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active_step?: string
+          created_at?: string
+          id?: string
+          project_id?: string
+          step_data?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wizard_progress_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

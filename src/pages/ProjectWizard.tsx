@@ -10,22 +10,29 @@ import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardTabs } from "@/components/wizard/WizardTabs";
 import { WizardCanvas } from "@/components/wizard/WizardCanvas";
 import { WizardControlPanel } from "@/components/wizard/WizardControlPanel";
+import { WizardProgressIndicator } from "@/components/wizard/WizardProgressIndicator";
 import { useWizardSteps } from "@/hooks/useWizardSteps";
+import { useWizardProgress } from "@/hooks/useWizardProgress";
 
 const ProjectWizard = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { pages, overlays, loading } = useProjectData(id!);
+  const { resetProgress } = useWizardProgress(id!);
   
   const {
     steps,
     activeStep,
+    saving,
+    progressLoading,
     setActiveStep,
     updateStepPageSelection,
     updateStepStatus,
-    moveToNextStep
-  } = useWizardSteps(overlays);
+    moveToNextStep,
+    moveToPreviousStep,
+    canNavigateToStep
+  } = useWizardSteps(id!, overlays);
   
   const [analysisLoading, setAnalysisLoading] = useState(false);
 
@@ -83,25 +90,69 @@ const ProjectWizard = () => {
     }
   };
 
+  const handlePreviousStep = () => {
+    moveToPreviousStep();
+  };
+
+  const handleResetProgress = async () => {
+    await resetProgress();
+    // Refresh the page to reload initial state
+    window.location.reload();
+  };
+
   const currentStep = steps.find(s => s.id === activeStep);
   const currentPage = pages.find(p => p.id === currentStep?.selectedPageId);
   const currentOverlay = currentStep?.overlay;
   const currentStepIndex = steps.findIndex(s => s.id === activeStep);
+  const canGoBack = currentStepIndex > 0;
 
   if (!id) {
     return <div>Project ID not found</div>;
+  }
+
+  if (progressLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppNavbar />
+        <div className="container mx-auto px-4 py-8 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading wizard progress...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
       <div className="container mx-auto px-4 py-8">
-        <WizardHeader projectId={id} />
+        <WizardHeader 
+          projectId={id} 
+          onResetProgress={handleResetProgress}
+          saving={saving}
+        />
+
+        <WizardProgressIndicator 
+          steps={steps}
+          saving={saving}
+        />
 
         <WizardTabs 
           steps={steps}
           activeStep={activeStep}
-          onStepChange={setActiveStep}
+          onStepChange={(stepId) => {
+            if (canNavigateToStep(stepId)) {
+              setActiveStep(stepId);
+            } else {
+              toast({
+                title: "Cannot Navigate",
+                description: "Complete the current step before proceeding.",
+                variant: "destructive"
+              });
+            }
+          }}
         />
 
         <Tabs value={activeStep} onValueChange={setActiveStep} className="w-full">
@@ -126,6 +177,9 @@ const ProjectWizard = () => {
                     onPageSelect={handlePageSelect}
                     onRunAnalysis={handleRunAnalysis}
                     onAcceptAndNext={handleAcceptAndNext}
+                    onPreviousStep={handlePreviousStep}
+                    canGoBack={canGoBack}
+                    canNavigateToStep={canNavigateToStep}
                   />
                 </div>
               </div>

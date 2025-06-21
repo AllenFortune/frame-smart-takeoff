@@ -2,7 +2,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Play, CheckCircle } from "lucide-react";
+import { Play, CheckCircle, ArrowLeft, ArrowRight } from "lucide-react";
 import { PageSelector } from "@/components/PageSelector";
 import { PlanPage } from "@/hooks/useProjectData";
 
@@ -24,6 +24,9 @@ interface WizardControlPanelProps {
   onPageSelect: (pageId: string) => void;
   onRunAnalysis: () => void;
   onAcceptAndNext: () => void;
+  onPreviousStep: () => void;
+  canGoBack: boolean;
+  canNavigateToStep: (stepId: string) => boolean;
 }
 
 export const WizardControlPanel = ({
@@ -35,12 +38,20 @@ export const WizardControlPanel = ({
   totalSteps,
   onPageSelect,
   onRunAnalysis,
-  onAcceptAndNext
+  onAcceptAndNext,
+  onPreviousStep,
+  canGoBack,
+  canNavigateToStep
 }: WizardControlPanelProps) => {
   return (
     <Card className="rounded-2xl shadow-lg">
       <CardHeader>
-        <CardTitle className="text-lg">{step.name}</CardTitle>
+        <CardTitle className="text-lg flex items-center justify-between">
+          {step.name}
+          <Badge variant="outline">
+            Step {currentStepIndex + 1} of {totalSteps}
+          </Badge>
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="space-y-2">
@@ -87,14 +98,27 @@ export const WizardControlPanel = ({
           </div>
         </div>
 
-        <Button
-          variant="outline"
-          className="w-full rounded-full"
-          onClick={onAcceptAndNext}
-          disabled={step.status !== "complete"}
-        >
-          {currentStepIndex === totalSteps - 1 ? "Complete & Review" : "Accept & Next"}
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 rounded-full"
+            onClick={onPreviousStep}
+            disabled={!canGoBack}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Previous
+          </Button>
+
+          <Button
+            variant="outline"
+            className="flex-1 rounded-full"
+            onClick={onAcceptAndNext}
+            disabled={step.status !== "complete"}
+          >
+            {currentStepIndex === totalSteps - 1 ? "Complete" : "Next"}
+            {currentStepIndex !== totalSteps - 1 && <ArrowRight className="w-4 h-4 ml-2" />}
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

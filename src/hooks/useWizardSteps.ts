@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { PlanOverlay } from "@/hooks/useProjectData";
+import { useWizardProgress } from "@/hooks/useWizardProgress";
 
 export interface StepData {
   id: string;
@@ -10,7 +11,7 @@ export interface StepData {
   overlay?: any;
 }
 
-export const useWizardSteps = (overlays: PlanOverlay[]) => {
+export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
   const [steps, setSteps] = useState<StepData[]>([
     { id: "exterior", name: "Exterior Walls", status: "pending" },
     { id: "interior", name: "Interior Walls", status: "pending" },
@@ -19,6 +20,30 @@ export const useWizardSteps = (overlays: PlanOverlay[]) => {
   ]);
 
   const [activeStep, setActiveStep] = useState("exterior");
+  const { progress, loading: progressLoading, saving, saveProgress } = useWizardProgress(projectId);
+
+  // Load progress when available
+  useEffect(() => {
+    if (progress && !progressLoading) {
+      setActiveStep(progress.active_step);
+      
+      // Restore step data from saved progress
+      setSteps(prevSteps => 
+        prevSteps.map(step => {
+          const savedStepData = progress.step_data[step.id];
+          if (savedStepData) {
+            return {
+              ...step,
+              status: savedStepData.status,
+              selectedPageId: savedStepData.selectedPageId,
+              overlay: savedStepData.overlay
+            };
+          }
+          return step;
+        })
+      );
+    }
+  }, [progress, progressLoading]);
 
   // Load existing overlays when data is available
   useEffect(() => {
@@ -28,13 +53,29 @@ export const useWizardSteps = (overlays: PlanOverlay[]) => {
           const stepOverlay = overlays.find(o => o.step === step.id);
           return {
             ...step,
-            status: stepOverlay ? "complete" : "pending",
-            overlay: stepOverlay
+            status: stepOverlay ? "complete" : step.status,
+            overlay: stepOverlay || step.overlay
           };
         })
       );
     }
   }, [overlays]);
+
+  // Auto-save progress when steps or active step changes
+  useEffect(() => {
+    if (!progressLoading && projectId) {
+      const stepData = steps.reduce((acc, step) => {
+        acc[step.id] = {
+          selectedPageId: step.selectedPageId,
+          status: step.status,
+          overlay: step.overlay
+        };
+        return acc;
+      }, {} as any);
+
+      saveProgress(activeStep, stepData);
+    }
+  }, [steps, activeStep, projectId, progressLoading]);
 
   const updateStepPageSelection = (pageId: string) => {
     setSteps(prevSteps =>
@@ -67,12 +108,40 @@ export const useWizardSteps = (overlays: PlanOverlay[]) => {
     return true; // All steps complete
   };
 
+  const moveToPreviousStep = () => {
+    const currentStepIndex = steps.findIndex(s => s.id === activeStep);
+    const previousStep = steps[currentStepIndex - 1];
+    
+    if (previousStep) {
+      setActiveStep(previousStep.id);
+      return true; // Successfully moved back
+    }
+    return false; // Already at first step
+  };
+
+  const canNavigateToStep = (stepId: string) => {
+    const stepIndex = steps.findIndex(s => s.id === stepId);
+    const currentIndex = steps.findIndex(s => s.id === activeStep);
+    
+    // Allow navigation to current step, previous steps, or next step if current is complete
+    return stepIndex <= currentIndex || 
+           (stepIndex === currentIndex + 1 && steps[currentIndex].status === 'complete');
+  };
+
   return {
     steps,
     activeStep,
-    setActiveStep,
+    saving,
+    progressLoading,
+    setActiveStep: (stepId: string) => {
+      if (canNavigateToStep(stepId)) {
+        setActiveStep(stepId);
+      }
+    },
     updateStepPageSelection,
     updateStepStatus,
-    moveToNextStep
+    moveToNextStep,
+    moveToPreviousStep,
+    canNavigateToStep
   };
 };
