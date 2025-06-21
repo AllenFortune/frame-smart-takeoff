@@ -20,11 +20,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [initialized, setInitialized] = useState(false);
   
   const { profile, fetchProfile, updateProfile: updateProfileData, clearProfile } = useProfile();
 
   useEffect(() => {
     let mounted = true;
+    
+    if (initialized) {
+      return;
+    }
+
     console.log('AuthProvider: Setting up auth state listener');
 
     // Set up auth state listener
@@ -59,7 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setTimeout(async () => {
             if (mounted) {
               console.log('AuthProvider: Fetching profile for user:', session.user.id);
-              await fetchProfile(session.user.id);
+              try {
+                await fetchProfile(session.user.id);
+              } catch (error) {
+                console.error('AuthProvider: Error fetching profile:', error);
+              }
             }
           }, 0);
         } else {
@@ -67,7 +77,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           clearProfile();
         }
         
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+        }
       }
     );
 
@@ -91,7 +103,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           console.log('AuthProvider: Initial user found, fetching profile');
-          await fetchProfile(session.user.id);
+          try {
+            await fetchProfile(session.user.id);
+          } catch (error) {
+            console.error('AuthProvider: Error fetching initial profile:', error);
+          }
         }
       } catch (error) {
         console.error('AuthProvider: Error initializing auth:', error);
@@ -99,6 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (mounted) {
           console.log('AuthProvider: Auth initialization complete');
           setLoading(false);
+          setInitialized(true);
         }
       }
     };
@@ -110,7 +127,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       subscription.unsubscribe();
     };
-  }, [fetchProfile, clearProfile]);
+  }, [initialized]); // Only depend on initialized flag
 
   const signIn = async (email: string, password: string) => {
     console.log('AuthProvider: Attempting sign in for email:', email);
