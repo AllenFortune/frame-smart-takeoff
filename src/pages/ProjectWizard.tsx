@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useProjectData } from "@/hooks/useProjectData";
@@ -151,9 +150,26 @@ const ProjectWizard = () => {
   };
 
   const handleResetProgress = async () => {
-    await resetProgress();
-    // Refresh the page to reload initial state
-    window.location.reload();
+    try {
+      await resetProgress();
+      
+      // Reset local state instead of hard reload
+      setSelectedPages(new Set());
+      setAnalysisLoading(false);
+      
+      toast({
+        title: "Progress Reset",
+        description: "Wizard progress has been reset. You can start fresh."
+      });
+      
+    } catch (error) {
+      console.error('Error resetting progress:', error);
+      toast({
+        title: "Reset Failed",
+        description: "Failed to reset progress. Please try again.",
+        variant: "destructive"
+      });
+    }
   };
 
   const currentStep = steps.find(s => s.id === activeStep);
