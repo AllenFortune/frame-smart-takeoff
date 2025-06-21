@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,7 +8,7 @@ import { Slider } from '@/components/ui/slider';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { PageImage } from '@/components/ui/page-image';
+import { PageImage } from '@/components/pages/PageImage';
 
 interface PlanPage {
   id: string;
@@ -15,6 +16,9 @@ interface PlanPage {
   class: string;
   confidence: number;
   img_url: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  full_url: string | null;
 }
 
 interface PageGridProps {

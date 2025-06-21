@@ -11,6 +11,9 @@ interface PlanPage {
   class: string;
   confidence: number;
   img_url: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
+  full_url: string | null;
 }
 
 interface PageGridViewProps {

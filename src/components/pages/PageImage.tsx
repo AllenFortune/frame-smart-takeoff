@@ -1,9 +1,10 @@
 
 import React, { useState, useCallback } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
-import { AlertCircle, RefreshCw, ZoomIn, Image } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { useMultiResolutionImage } from '@/hooks/useMultiResolutionImage';
+import { ImageLoadingSpinner } from './ImageLoadingSpinner';
+import { ResolutionControls } from './ResolutionControls';
+import { ImageOverlays } from './ImageOverlays';
 
 interface PlanPage {
   id: string;
@@ -104,14 +105,7 @@ export const PageImage = ({
     <div className="w-full h-full relative group">
       {/* Loading spinner */}
       {(isLoading || isRefreshing) && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 z-10">
-          <div className="flex flex-col items-center gap-2">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-            <span className="text-xs text-muted-foreground">
-              {isRefreshing ? 'Refreshing...' : 'Loading...'}
-            </span>
-          </div>
-        </div>
+        <ImageLoadingSpinner isRefreshing={isRefreshing} />
       )}
       
       {/* Main image */}
@@ -127,84 +121,24 @@ export const PageImage = ({
       
       {/* Resolution controls */}
       {showResolutionControls && (
-        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <div className="flex gap-1">
-            {availableResolutions.thumbnail && (
-              <Button
-                size="sm"
-                variant={currentResolution === 'thumbnail' ? 'default' : 'outline'}
-                onClick={() => handleResolutionSwitch('thumbnail')}
-                className="h-6 px-2 text-xs"
-              >
-                S
-              </Button>
-            )}
-            {availableResolutions.preview && (
-              <Button
-                size="sm"
-                variant={currentResolution === 'preview' ? 'default' : 'outline'}
-                onClick={() => handleResolutionSwitch('preview')}
-                className="h-6 px-2 text-xs"
-              >
-                M
-              </Button>
-            )}
-            {availableResolutions.full && (
-              <Button
-                size="sm"
-                variant={currentResolution === 'full' ? 'default' : 'outline'}
-                onClick={() => handleResolutionSwitch('full')}
-                className="h-6 px-2 text-xs"
-              >
-                L
-              </Button>
-            )}
-          </div>
-        </div>
+        <ResolutionControls
+          currentResolution={currentResolution}
+          availableResolutions={availableResolutions}
+          onResolutionChange={handleResolutionSwitch}
+        />
       )}
       
-      {/* Higher resolution indicator */}
-      {hasHigherResolution && !showResolutionControls && (
-        <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-          <div className="flex items-center gap-1 bg-black/50 text-white text-xs px-2 py-1 rounded">
-            <ZoomIn className="w-3 h-3" />
-            <span>HD Available</span>
-          </div>
-        </div>
-      )}
-      
-      {/* Resolution indicator */}
-      <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-        <div className="flex items-center gap-1">
-          <Image className="w-3 h-3" />
-          <span className="capitalize">{currentResolution}</span>
-        </div>
-      </div>
-      
-      {/* Error indicator and retry button */}
-      {hasError && (
-        <div className="absolute top-2 right-2 flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-500" />
-          {projectId && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={handleManualRetry}
-              disabled={isRefreshing}
-              className="h-6 px-2 text-xs"
-            >
-              <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-            </Button>
-          )}
-        </div>
-      )}
-      
-      {/* Retry count indicator (for debugging) */}
-      {manualRetryCount > 0 && (
-        <div className="absolute bottom-2 right-2 bg-black/50 text-white text-xs px-1 rounded">
-          Retry {manualRetryCount}/3
-        </div>
-      )}
+      {/* Image overlays */}
+      <ImageOverlays
+        currentResolution={currentResolution}
+        hasHigherResolution={hasHigherResolution}
+        hasError={hasError}
+        isRefreshing={isRefreshing}
+        manualRetryCount={manualRetryCount}
+        projectId={projectId}
+        showResolutionControls={showResolutionControls}
+        onRetry={handleManualRetry}
+      />
     </div>
   );
 };
