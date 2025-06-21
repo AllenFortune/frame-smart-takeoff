@@ -31,7 +31,7 @@ export const ThumbnailDebugPanel = ({ projectId, onRefresh }: ThumbnailDebugPane
       } else {
         toast({
           title: "Debug Failed",
-          description: result.error || "Unknown error occurred",
+          description: 'error' in result ? result.error : "Unknown error occurred",
           variant: "destructive"
         });
       }
@@ -60,7 +60,7 @@ export const ThumbnailDebugPanel = ({ projectId, onRefresh }: ThumbnailDebugPane
       } else {
         toast({
           title: "Regeneration Failed", 
-          description: result.error || "Unknown error occurred",
+          description: 'error' in result ? result.error : "Unknown error occurred",
           variant: "destructive"
         });
       }
@@ -148,7 +148,9 @@ export const ThumbnailDebugPanel = ({ projectId, onRefresh }: ThumbnailDebugPane
                 </div>
               </div>
             ) : (
-              <p className="text-red-600 text-sm">{debugResult.error || "Unknown error occurred"}</p>
+              <p className="text-red-600 text-sm">
+                {'error' in debugResult ? debugResult.error : "Unknown error occurred"}
+              </p>
             )}
           </div>
         )}
