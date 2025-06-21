@@ -2,19 +2,21 @@ import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, FolderOpen, Calendar, DollarSign, AlertTriangle, Wifi, WifiOff, RefreshCw } from "lucide-react";
+import { Plus, FolderOpen, Calendar, DollarSign, AlertTriangle, Wifi, WifiOff, RefreshCw, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { AppNavbar } from "@/components/AppNavbar";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useProjectsData } from "@/hooks/useProjectsData";
+import { DeleteProjectDialog } from "@/components/DeleteProjectDialog";
 
 const Dashboard = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<{ projectId: string; projectName: string } | null>(null);
   
   const { 
     projects, 
@@ -23,7 +25,9 @@ const Dashboard = () => {
     isOnline, 
     retryCount, 
     retry, 
-    refetch 
+    refetch,
+    deleteProject,
+    deletingProjects
   } = useProjectsData(user?.id);
 
   const handleNewProject = async () => {
@@ -92,6 +96,13 @@ const Dashboard = () => {
     } finally {
       setCreating(false);
     }
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!deleteDialog) return;
+    
+    await deleteProject(projectId);
+    setDeleteDialog(null);
   };
 
   const getStatusColor = (status: string) => {
@@ -216,19 +227,35 @@ const Dashboard = () => {
           {projects.map((project) => (
             <Card
               key={project.id}
-              className="rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer"
-              onClick={() => navigate(`/project/${project.id}/upload`)}
+              className="rounded-2xl shadow-lg hover:shadow-xl transition-shadow duration-300 cursor-pointer group"
             >
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <FolderOpen className="w-8 h-8 text-primary" />
-                  <Badge className={getStatusColor("In Progress")}>
-                    In Progress
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor("In Progress")}>
+                      In Progress
+                    </Badge>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-muted-foreground hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteDialog({ projectId: project.id, projectName: project.name });
+                      }}
+                      disabled={deletingProjects.has(project.id)}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </div>
                 <CardTitle className="text-lg">{project.name}</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-3">
+              <CardContent 
+                className="space-y-3"
+                onClick={() => navigate(`/project/${project.id}/upload`)}
+              >
                 <div className="flex items-center justify-between text-sm">
                   <div className="flex items-center text-muted-foreground">
                     <Calendar className="w-4 h-4 mr-1" />
@@ -265,6 +292,14 @@ const Dashboard = () => {
           </div>
         )}
       </div>
+
+      <DeleteProjectDialog
+        isOpen={deleteDialog !== null}
+        onClose={() => setDeleteDialog(null)}
+        onConfirm={() => deleteDialog && handleDeleteProject(deleteDialog.projectId)}
+        projectName={deleteDialog?.projectName || ""}
+        isDeleting={deleteDialog ? deletingProjects.has(deleteDialog.projectId) : false}
+      />
     </div>
   );
 };
