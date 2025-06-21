@@ -1,27 +1,42 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useProjectData } from '@/hooks/useProjectData';
+import { Button } from '@/components/ui/button';
+import { ArrowRight, ArrowLeft } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { AppNavbar } from '@/components/AppNavbar';
 import { MobileOptimizedPageGrid } from '@/components/MobileOptimizedPageGrid';
-import { ProgressIndicator } from '@/components/ProgressIndicator';
-import { useProjectData } from '@/hooks/useProjectData';
-import { useJobPolling } from '@/hooks/useJobPolling';
-import { useToast } from '@/hooks/use-toast';
-import { extractSummary } from '@/utils/edgeFunctions';
 
 const ProjectPages = () => {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+  const { pages, loading } = useProjectData(id!);
   const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
-  
-  const { pages, loading } = useProjectData(id!);
-  const { currentJob, cancelJob, createJob } = useJobPolling({ 
-    projectId: id,
-    jobType: 'extract_summary'
-  });
+
+  // Load previously selected pages from localStorage
+  useEffect(() => {
+    if (id) {
+      const saved = localStorage.getItem(`selected-pages-${id}`);
+      if (saved) {
+        try {
+          const pageIds = JSON.parse(saved);
+          setSelectedPages(new Set(pageIds));
+        } catch (error) {
+          console.error('Error loading saved page selection:', error);
+        }
+      }
+    }
+  }, [id]);
+
+  // Save selected pages to localStorage whenever selection changes
+  useEffect(() => {
+    if (id && selectedPages.size > 0) {
+      localStorage.setItem(`selected-pages-${id}`, JSON.stringify(Array.from(selectedPages)));
+    }
+  }, [id, selectedPages]);
 
   const handlePageToggle = (pageId: string) => {
     const newSelected = new Set(selectedPages);
@@ -33,51 +48,33 @@ const ProjectPages = () => {
     setSelectedPages(newSelected);
   };
 
-  const handleSelectAllRelevant = () => {
-    const relevant = pages
-      .filter(page => page.confidence >= confidenceThreshold[0])
-      .map(page => page.id);
-    setSelectedPages(new Set(relevant));
+  const handleConfidenceChange = (threshold: number[]) => {
+    setConfidenceThreshold(threshold);
   };
 
-  const handleContinue = async (selectedPageIds: string[]) => {
-    if (!id) return;
+  const handleSelectAllRelevant = () => {
+    const relevantPages = pages.filter(page => 
+      page.confidence >= confidenceThreshold[0] && 
+      page.class !== 'upload_failed'
+    );
+    setSelectedPages(new Set(relevantPages.map(p => p.id)));
+  };
 
-    try {
-      // Create a job in the database first
-      const job = await createJob(id, 'extract_summary', 5);
-      if (!job) {
-        throw new Error('Failed to create job');
-      }
-
-      // Start the edge function
-      await extractSummary(id, selectedPageIds);
-
+  const handleContinue = () => {
+    if (selectedPages.size === 0) {
       toast({
-        title: "Analysis Started",
-        description: "Page analysis is running in the background..."
-      });
-
-      // Navigate immediately, job polling will handle progress
-      navigate(`/project/${id}/specs`);
-    } catch (error) {
-      console.error('Error starting summary extraction:', error);
-      toast({
-        title: "Error",
-        description: "Failed to start page analysis. Please try again.",
+        title: "No Pages Selected",
+        description: "Please select at least one page to continue.",
         variant: "destructive"
       });
+      return;
     }
+
+    navigate(`/project/${id}/specs`);
   };
 
-  const handleCancelJob = () => {
-    if (currentJob) {
-      cancelJob(currentJob.id);
-      toast({
-        title: "Job Cancelled",
-        description: "Page analysis has been cancelled."
-      });
-    }
+  const handleBack = () => {
+    navigate(`/project/${id}/preflight`);
   };
 
   if (!id) {
@@ -87,29 +84,35 @@ const ProjectPages = () => {
   return (
     <div className="min-h-screen bg-background">
       <AppNavbar />
-      <main className="pb-20 sm:pb-8">
-        {/* Progress Indicator */}
-        {currentJob && (
-          <div className="container mx-auto px-4 pt-4">
-            <ProgressIndicator 
-              job={currentJob}
-              onCancel={handleCancelJob}
-            />
+      
+      <div className="container mx-auto px-4 py-8">
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-4">
+            <h1 className="text-3xl font-bold">Select Pages for Analysis</h1>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleBack}>
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back
+              </Button>
+            </div>
           </div>
-        )}
+          <p className="text-muted-foreground">
+            Choose which pages you want to include in the framing analysis. 
+            Pages are automatically classified and scored by confidence level.
+          </p>
+        </div>
 
-        {/* Page Grid */}
         <MobileOptimizedPageGrid
           pages={pages}
           selectedPages={selectedPages}
           confidenceThreshold={confidenceThreshold}
           loading={loading}
           onPageToggle={handlePageToggle}
-          onConfidenceChange={setConfidenceThreshold}
+          onConfidenceChange={handleConfidenceChange}
           onSelectAllRelevant={handleSelectAllRelevant}
           onContinue={handleContinue}
         />
-      </main>
+      </div>
     </div>
   );
 };
