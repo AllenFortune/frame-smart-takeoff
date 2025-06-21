@@ -11,6 +11,7 @@ export interface WizardProgressData {
   step_data: {
     [stepId: string]: {
       selectedPageId?: string;
+      selectedPages?: string[]; // Add this property
       status: 'pending' | 'running' | 'complete';
       overlay?: any;
     };
