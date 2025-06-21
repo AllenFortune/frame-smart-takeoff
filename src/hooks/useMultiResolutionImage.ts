@@ -32,23 +32,35 @@ export const useMultiResolutionImage = ({
   const [error, setError] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // Get the best available URL for the requested resolution
+  // Get the best available URL for the requested resolution with better fallback logic
   const getBestUrl = useCallback((resolution: ImageResolution): string | null => {
+    console.log(`Getting best URL for resolution: ${resolution}`, {
+      thumbnail_url: !!page.thumbnail_url,
+      preview_url: !!page.preview_url,
+      full_url: !!page.full_url,
+      img_url: !!page.img_url
+    });
+
     switch (resolution) {
       case 'thumbnail':
-        return page.thumbnail_url || page.preview_url || page.img_url;
+        return page.thumbnail_url || page.preview_url || page.img_url || page.full_url;
       case 'preview':
-        return page.preview_url || page.img_url || page.thumbnail_url;
+        return page.preview_url || page.img_url || page.full_url || page.thumbnail_url;
       case 'full':
-        return page.full_url || page.preview_url || page.img_url;
+        return page.full_url || page.preview_url || page.img_url || page.thumbnail_url;
       default:
-        return page.preview_url || page.img_url;
+        return page.preview_url || page.img_url || page.full_url || page.thumbnail_url;
     }
   }, [page]);
 
   // Initialize URL based on preferred resolution
   useEffect(() => {
     const bestUrl = getBestUrl(preferredResolution);
+    console.log(`Setting URL for page ${page.page_no}:`, {
+      preferredResolution,
+      bestUrl: bestUrl?.substring(0, 50) + '...'
+    });
+    
     setCurrentUrl(bestUrl);
     
     // Determine actual resolution being used

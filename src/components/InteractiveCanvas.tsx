@@ -1,7 +1,7 @@
 
 import React from 'react';
 import { CanvasToolbar } from './canvas/CanvasToolbar';
-import { CanvasContainer } from './canvas/CanvasContainer';
+import { EnhancedCanvasContainer } from './canvas/EnhancedCanvasContainer';
 import { FeatureInfoPanel } from './canvas/FeatureInfoPanel';
 import { GeoJsonData } from './canvas/types';
 import { useCanvasState } from '@/hooks/useCanvasState';
@@ -84,13 +84,14 @@ export const InteractiveCanvas = ({
         />
       )}
 
-      {/* Canvas Container - always render when we have imageUrl */}
-      <CanvasContainer
+      {/* Enhanced Canvas Container */}
+      <EnhancedCanvasContainer
         imageUrl={imageUrl}
         geojson={geojson}
         state={state}
         onStateUpdate={updateState}
         onPolygonClick={onPolygonClick}
+        className="h-96"
       />
 
       {/* Selected Feature Info */}
