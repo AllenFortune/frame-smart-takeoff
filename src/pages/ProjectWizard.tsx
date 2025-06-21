@@ -8,10 +8,9 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { AppNavbar } from "@/components/AppNavbar";
 import { WizardHeader } from "@/components/wizard/WizardHeader";
 import { WizardTabs } from "@/components/wizard/WizardTabs";
-import { WizardCanvas } from "@/components/wizard/WizardCanvas";
-import { WizardControlPanel } from "@/components/wizard/WizardControlPanel";
 import { WizardProgressIndicator } from "@/components/wizard/WizardProgressIndicator";
 import { WizardPageSelection } from "@/components/wizard/WizardPageSelection";
+import { WizardAnalysisStep } from "@/components/wizard/WizardAnalysisStep";
 import { useWizardSteps } from "@/hooks/useWizardSteps";
 import { useWizardProgress } from "@/hooks/useWizardProgress";
 
@@ -158,8 +157,6 @@ const ProjectWizard = () => {
   };
 
   const currentStep = steps.find(s => s.id === activeStep);
-  const currentPage = pages.find(p => p.id === currentStep?.selectedPageId);
-  const currentOverlay = currentStep?.overlay;
   const currentStepIndex = steps.findIndex(s => s.id === activeStep);
   const canGoBack = currentStepIndex > 0;
 
@@ -224,31 +221,20 @@ const ProjectWizard = () => {
                   onContinue={handlePageSelectionContinue}
                 />
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2">
-                    <WizardCanvas 
-                      currentPage={currentPage}
-                      currentOverlay={currentOverlay}
-                    />
-                  </div>
-
-                  <div className="space-y-6">
-                    <WizardControlPanel
-                      step={step}
-                      pages={pages}
-                      loading={loading}
-                      analysisLoading={analysisLoading}
-                      currentStepIndex={currentStepIndex}
-                      totalSteps={steps.length}
-                      onPageSelect={handlePageSelect}
-                      onRunAnalysis={handleRunAnalysis}
-                      onAcceptAndNext={handleAcceptAndNext}
-                      onPreviousStep={handlePreviousStep}
-                      canGoBack={canGoBack}
-                      canNavigateToStep={canNavigateToStep}
-                    />
-                  </div>
-                </div>
+                <WizardAnalysisStep
+                  step={step}
+                  pages={pages}
+                  loading={loading}
+                  analysisLoading={analysisLoading}
+                  currentStepIndex={currentStepIndex}
+                  totalSteps={steps.length}
+                  onPageSelect={handlePageSelect}
+                  onRunAnalysis={handleRunAnalysis}
+                  onAcceptAndNext={handleAcceptAndNext}
+                  onPreviousStep={handlePreviousStep}
+                  canGoBack={canGoBack}
+                  canNavigateToStep={canNavigateToStep}
+                />
               )}
             </TabsContent>
           ))}
