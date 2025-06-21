@@ -11,16 +11,16 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { classifyPages } from "@/utils/edgeFunctions";
 import { useJobPolling } from "@/hooks/useJobPolling";
+import { useUploadProgress } from "@/hooks/useUploadProgress";
 
 const ProjectUpload = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { user } = useAuth();
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
-  const [processing, setProcessing] = useState(false);
+  
+  const uploadProgress = useUploadProgress();
   
   const { currentJob, isPolling } = useJobPolling({
     projectId: id,
@@ -91,9 +91,9 @@ const ProjectUpload = () => {
       
       uploadedUrls.push(urlData.publicUrl);
       
-      // Update progress
-      const progress = Math.round(((i + 1) / files.length) * 50); // Upload is 50% of total
-      setUploadProgress(progress);
+      // Update progress (upload is 50% of total)
+      const progress = Math.round(((i + 1) / files.length) * 50);
+      uploadProgress.updateProgress(progress);
     }
     
     return uploadedUrls;
@@ -118,18 +118,16 @@ const ProjectUpload = () => {
       return;
     }
 
-    setUploading(true);
-    setUploadProgress(0);
-
     try {
       console.log('Starting file upload process...');
+      uploadProgress.startUpload();
       
       // Step 1: Upload files to storage
       const uploadedUrls = await uploadFilesToStorage(files);
       console.log('Files uploaded successfully:', uploadedUrls);
       
-      setUploadProgress(50);
-      setProcessing(true);
+      uploadProgress.updateProgress(50);
+      uploadProgress.startProcessing();
       
       // Step 2: Process each PDF
       for (let i = 0; i < uploadedUrls.length; i++) {
@@ -142,24 +140,16 @@ const ProjectUpload = () => {
           
           // Update progress
           const processingProgress = 50 + Math.round(((i + 1) / uploadedUrls.length) * 50);
-          setUploadProgress(processingProgress);
+          uploadProgress.updateProgress(processingProgress);
           
         } catch (classifyError) {
           console.error('Classification error for URL:', pdfUrl, classifyError);
-          toast({
-            title: "Processing Error",
-            description: `Failed to process ${files[i]?.name || 'PDF'}: ${classifyError instanceof Error ? classifyError.message : 'Unknown error'}`,
-            variant: "destructive",
-          });
+          uploadProgress.failUpload(`Failed to process ${files[i]?.name || 'PDF'}: ${classifyError instanceof Error ? classifyError.message : 'Unknown error'}`);
+          return;
         }
       }
 
-      setUploadProgress(100);
-      
-      toast({
-        title: "Upload complete!",
-        description: `Successfully processed ${files.length} PDF file(s)`,
-      });
+      uploadProgress.completeUpload(`Successfully processed ${files.length} PDF file(s)`);
 
       // Navigate to preflight after a short delay
       setTimeout(() => {
@@ -169,30 +159,24 @@ const ProjectUpload = () => {
     } catch (error) {
       console.error('Upload process failed:', error);
       const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      
-      toast({
-        title: "Upload failed",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      setUploadProgress(0);
-    } finally {
-      setUploading(false);
-      setProcessing(false);
+      uploadProgress.failUpload(errorMessage);
     }
   };
 
   const getProgressLabel = () => {
-    if (uploadProgress < 50) {
+    if (uploadProgress.uploading && uploadProgress.progress < 50) {
       return "Uploading files...";
-    } else if (processing && uploadProgress < 100) {
+    } else if (uploadProgress.processing) {
       return "Processing and classifying pages...";
-    } else if (uploadProgress === 100) {
+    } else if (uploadProgress.completed) {
       return "Complete!";
+    } else if (uploadProgress.error) {
+      return "Upload failed";
     }
     return "Ready to upload";
   };
+
+  const isUploading = uploadProgress.uploading || uploadProgress.processing;
 
   return (
     <div className="min-h-screen bg-background">
@@ -210,19 +194,19 @@ const ProjectUpload = () => {
             <CardContent className="p-0">
               <div
                 className={`border-2 border-dashed rounded-xl p-12 text-center transition-colors ${
-                  uploading 
+                  isUploading 
                     ? "border-muted bg-muted/10" 
                     : "border-primary/30 hover:border-primary/50"
                 }`}
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
               >
-                <CloudUpload className={`w-16 h-16 mx-auto mb-4 ${uploading ? "text-muted-foreground" : "text-primary"}`} />
+                <CloudUpload className={`w-16 h-16 mx-auto mb-4 ${isUploading ? "text-muted-foreground" : "text-primary"}`} />
                 <h3 className="text-xl font-semibold mb-2">
-                  {uploading ? "Processing..." : "Drag & drop your PDF plans"}
+                  {isUploading ? "Processing..." : "Drag & drop your PDF plans"}
                 </h3>
                 <p className="text-muted-foreground mb-4">
-                  {uploading ? "Please wait while we process your files" : "or click to browse files"}
+                  {isUploading ? "Please wait while we process your files" : "or click to browse files"}
                 </p>
                 <input
                   type="file"
@@ -231,13 +215,13 @@ const ProjectUpload = () => {
                   onChange={handleFileSelect}
                   className="hidden"
                   id="file-upload"
-                  disabled={uploading}
+                  disabled={isUploading}
                 />
                 <Button
                   variant="outline"
                   className="rounded-full"
                   onClick={() => document.getElementById('file-upload')?.click()}
-                  disabled={uploading}
+                  disabled={isUploading}
                 >
                   Browse files
                 </Button>
@@ -253,22 +237,25 @@ const ProjectUpload = () => {
                       <span className="text-xs text-muted-foreground">
                         {(file.size / 1024 / 1024).toFixed(1)} MB
                       </span>
-                      {uploadProgress === 100 && (
+                      {uploadProgress.completed && (
                         <CheckCircle className="w-5 h-5 text-green-500" />
+                      )}
+                      {uploadProgress.error && (
+                        <AlertCircle className="w-5 h-5 text-red-500" />
                       )}
                     </div>
                   ))}
                 </div>
               )}
 
-              {uploading && (
+              {isUploading && (
                 <div className="mt-6 space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span>{getProgressLabel()}</span>
-                    <span>{uploadProgress}%</span>
+                    <span>{uploadProgress.progress}%</span>
                   </div>
-                  <Progress value={uploadProgress} className="w-full" />
-                  {processing && (
+                  <Progress value={uploadProgress.progress} className="w-full" />
+                  {uploadProgress.processing && (
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <div className="animate-spin rounded-full h-4 w-4 border-2 border-primary border-t-transparent"></div>
                       Using AI to classify and analyze plan pages...
@@ -277,7 +264,25 @@ const ProjectUpload = () => {
                 </div>
               )}
 
-              {files.length > 0 && !uploading && uploadProgress < 100 && (
+              {uploadProgress.error && (
+                <div className="mt-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center gap-2 text-red-700">
+                    <AlertCircle className="w-5 h-5" />
+                    <p className="text-sm font-medium">Upload Failed</p>
+                  </div>
+                  <p className="text-sm text-red-600 mt-1">{uploadProgress.error}</p>
+                  <Button
+                    onClick={uploadProgress.reset}
+                    variant="outline"
+                    size="sm"
+                    className="mt-2"
+                  >
+                    Try Again
+                  </Button>
+                </div>
+              )}
+
+              {files.length > 0 && !isUploading && !uploadProgress.completed && !uploadProgress.error && (
                 <div className="mt-6">
                   <Button
                     onClick={handleUpload}
