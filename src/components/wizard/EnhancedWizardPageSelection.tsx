@@ -7,9 +7,9 @@ import { usePageSelection } from '@/hooks/usePageSelection';
 import { LoadingCard } from './pageSelection/LoadingCard';
 import { LocationCard } from './pageSelection/LocationCard';
 import { ManualSelectionCard } from './pageSelection/ManualSelectionCard';
-import { PageSelectionDebugCard } from './pageSelection/PageSelectionDebugCard';
 import { PlanTypeRecommendations } from './PlanTypeRecommendations';
 import { MobileOptimizedPageGrid } from '../MobileOptimizedPageGrid';
+import { PageSelectionDebugCard } from "./pageSelection/PageSelectionDebugCard";
 
 interface EnhancedWizardPageSelectionProps {
   pages?: any[];
