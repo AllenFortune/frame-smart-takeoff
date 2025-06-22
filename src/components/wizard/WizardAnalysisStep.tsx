@@ -26,6 +26,7 @@ interface WizardAnalysisStepProps {
   onPreviousStep: () => void;
   canGoBack: boolean;
   canNavigateToStep: (stepId: string) => boolean;
+  projectId?: string; // Add projectId prop
 }
 
 export const WizardAnalysisStep = ({
@@ -40,7 +41,8 @@ export const WizardAnalysisStep = ({
   onAcceptAndNext,
   onPreviousStep,
   canGoBack,
-  canNavigateToStep
+  canNavigateToStep,
+  projectId // Add projectId to destructured props
 }: WizardAnalysisStepProps) => {
   const currentPage = pages.find(p => p.id === step.selectedPageId);
   const currentOverlay = step.overlay;
@@ -57,6 +59,7 @@ export const WizardAnalysisStep = ({
           currentPage={currentPage}
           currentOverlay={currentOverlay}
           isLoading={loading}
+          projectId={projectId} // Pass projectId to WizardCanvas
         />
       </div>
 
