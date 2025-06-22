@@ -1,6 +1,7 @@
 
 import React, { useState, useCallback } from 'react';
 import { PlaceholderImage } from '@/components/upload/PlaceholderImage';
+import { PdfPageRenderer } from '@/components/pdf/PdfPageRenderer';
 import { useMultiResolutionImage } from '@/hooks/useMultiResolutionImage';
 import { ImageLoadingSpinner } from './ImageLoadingSpinner';
 import { ResolutionControls } from './ResolutionControls';
@@ -38,6 +39,7 @@ export const PageImage = ({
   showResolutionControls = false
 }: PageImageProps) => {
   const [manualRetryCount, setManualRetryCount] = useState(0);
+  const [usePdfFallback, setUsePdfFallback] = useState(false);
   
   const {
     currentUrl,
@@ -57,11 +59,20 @@ export const PageImage = ({
     projectId,
     onError: (pageId) => {
       onImageError(pageId);
+      // After 2 failed attempts, try PDF fallback
+      if (manualRetryCount >= 2) {
+        setUsePdfFallback(true);
+      }
     }
   });
 
   const hasError = imageErrors.has(page.id) || !!error;
   const isUploadFailed = page.class === 'upload_failed';
+
+  // Construct PDF URL for fallback rendering
+  const pdfUrl = projectId ? 
+    `https://erfbmgcxpmtnmkffqsac.supabase.co/storage/v1/object/public/plan-pdfs/${projectId}/plan.pdf` : 
+    null;
 
   const handleManualRetry = useCallback(() => {
     console.log(`Manual retry requested for page ${page.page_no}`);
@@ -77,6 +88,15 @@ export const PageImage = ({
     switchResolution(resolution);
   }, [switchResolution]);
 
+  const handlePdfLoadSuccess = useCallback(() => {
+    console.log(`PDF fallback loaded successfully for page ${page.page_no}`);
+  }, [page.page_no]);
+
+  const handlePdfLoadError = useCallback((error: Error) => {
+    console.error(`PDF fallback failed for page ${page.page_no}:`, error);
+    setUsePdfFallback(false);
+  }, [page.page_no]);
+
   // Show placeholder for upload failed pages
   if (isUploadFailed) {
     return (
@@ -86,6 +106,30 @@ export const PageImage = ({
         error={true}
         onRetry={handleManualRetry}
       />
+    );
+  }
+
+  // Use PDF fallback if no image URL or too many errors and PDF is available
+  if ((usePdfFallback || (!currentUrl && pdfUrl)) && pdfUrl) {
+    const width = preferredResolution === 'thumbnail' ? 150 : 
+                 preferredResolution === 'preview' ? 300 : 600;
+    
+    return (
+      <div className="w-full h-full relative group">
+        <PdfPageRenderer
+          pdfUrl={pdfUrl}
+          pageNumber={page.page_no}
+          width={width}
+          className="w-full h-full"
+          onLoadSuccess={handlePdfLoadSuccess}
+          onLoadError={handlePdfLoadError}
+        />
+        
+        {/* PDF fallback indicator */}
+        <div className="absolute top-2 left-2 bg-blue-500/80 text-white text-xs px-2 py-1 rounded">
+          PDF
+        </div>
+      </div>
     );
   }
 
