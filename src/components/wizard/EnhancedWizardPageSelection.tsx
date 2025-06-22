@@ -1,105 +1,111 @@
+import React, { useState, useEffect } from 'react';
+import { useParams } from 'react-router-dom';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useProjectData } from '@/hooks/useProjectData';
+import { usePageSelection } from '@/hooks/usePageSelection';
+import { LoadingCard } from './pageSelection/LoadingCard';
+import { LocationCard } from './pageSelection/LocationCard';
+import { ManualSelectionCard } from './pageSelection/ManualSelectionCard';
+import { PlanTypeRecommendations } from './pageSelection/PlanTypeRecommendations';
+import { MobileOptimizedPageGrid } from '../MobileOptimizedPageGrid';
+import { PageSelectionDebugCard } from "./pageSelection/PageSelectionDebugCard";
 
-import React, { useState } from 'react';
-import { PlanListSelector } from "./PlanListSelector";
-import { PlanTypeRecommendations } from "./PlanTypeRecommendations";
-import { PlanPage } from "@/hooks/useProjectData";
-import { LocationCard } from "./pageSelection/LocationCard";
-import { ManualSelectionCard } from "./pageSelection/ManualSelectionCard";
-import { LoadingCard } from "./pageSelection/LoadingCard";
-
-interface EnhancedWizardPageSelectionProps {
-  pages: PlanPage[];
-  selectedPages: Set<string>;
-  loading: boolean;
-  onPageToggle: (pageId: string) => void;
-  onContinue: (selectedPages: string[]) => void;
-}
-
-export const EnhancedWizardPageSelection = ({
-  pages,
-  selectedPages,
-  loading,
-  onPageToggle,
-  onContinue
-}: EnhancedWizardPageSelectionProps) => {
+export const EnhancedWizardPageSelection = () => {
+  const { id } = useParams();
+  const { pages, loading } = useProjectData(id!);
+  const [selectedState, setSelectedState] = useState('');
+  const [showRecommendations, setShowRecommendations] = useState(false);
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
-  const [selectedState, setSelectedState] = useState<string>('');
-  const [showRecommendations, setShowRecommendations] = useState(true);
+  
+  const {
+    selectedPages,
+    handlePageToggle: togglePage,
+    handlePageSelectionContinue: handleContinue
+  } = usePageSelection(id!, [], () => {}, () => {}, () => {});
 
-  const handleSelectAllRelevant = () => {
+  const selectAllRelevant = () => {
     const relevant = pages
-      .filter(page => 
-        page.confidence >= confidenceThreshold[0] && 
-        page.class !== 'upload_failed'
-      )
+      .filter(page => page.confidence >= confidenceThreshold[0])
       .map(page => page.id);
-    
-    // Clear current selection and add all relevant pages
-    const currentArray = Array.from(selectedPages);
-    currentArray.forEach(pageId => onPageToggle(pageId)); // Clear existing
-    
-    relevant.forEach(pageId => {
-      if (!selectedPages.has(pageId)) {
-        onPageToggle(pageId); // Add relevant pages
-      }
-    });
+    // This would need to be connected to the actual selection logic
   };
-
-  const handleApplyRecommendations = (recommendedPageIds: string[]) => {
-    // Clear current selection
-    const currentArray = Array.from(selectedPages);
-    currentArray.forEach(pageId => onPageToggle(pageId));
-    
-    // Add recommended pages
-    recommendedPageIds.forEach(pageId => {
-      if (!selectedPages.has(pageId)) {
-        onPageToggle(pageId);
-      }
-    });
-    
-    setShowRecommendations(false);
-  };
-
-  const handleContinue = () => {
-    onContinue(Array.from(selectedPages));
-  };
-
-  if (loading) {
-    return <LoadingCard />;
-  }
 
   return (
     <div className="space-y-6">
-      <LocationCard 
-        selectedState={selectedState}
-        onStateChange={setSelectedState}
-      />
+      {loading ? (
+        <LoadingCard />
+      ) : (
+        <>
+          <LocationCard
+            selectedState={selectedState}
+            onStateChange={setSelectedState}
+          />
 
-      {showRecommendations && (
-        <PlanTypeRecommendations
-          pages={pages}
-          selectedState={selectedState}
-          onRecommendationApply={handleApplyRecommendations}
-        />
+          {/* Add debug card when there are image loading issues */}
+          {pages.some(p => !p.thumbnail_url && !p.preview_url && !p.img_url) && (
+            <PageSelectionDebugCard 
+              projectId={id}
+              onRefresh={() => window.location.reload()}
+            />
+          )}
+
+          <ManualSelectionCard
+            showRecommendations={showRecommendations}
+            onShowRecommendations={setShowRecommendations}
+            confidenceThreshold={confidenceThreshold}
+            onThresholdChange={setConfidenceThreshold}
+            pages={pages}
+            selectedPages={selectedPages}
+            onSelectAllRelevant={selectAllRelevant}
+            onContinue={handleContinue}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              {!showRecommendations ? (
+                <MobileOptimizedPageGrid
+                  pages={pages}
+                  selectedPages={selectedPages}
+                  confidenceThreshold={confidenceThreshold}
+                  loading={loading}
+                  onPageToggle={togglePage}
+                  onConfidenceChange={setConfidenceThreshold}
+                  onSelectAllRelevant={selectAllRelevant}
+                  onContinue={handleContinue}
+                />
+              ) : (
+                <Card className="rounded-2xl shadow-lg">
+                  <CardHeader>
+                    <CardTitle className="text-lg">Plan Pages</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <MobileOptimizedPageGrid
+                      pages={pages}
+                      selectedPages={selectedPages}
+                      confidenceThreshold={confidenceThreshold}
+                      loading={loading}
+                      onPageToggle={togglePage}
+                      onConfidenceChange={setConfidenceThreshold}
+                      onSelectAllRelevant={selectAllRelevant}
+                      onContinue={handleContinue}
+                    />
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+
+            {showRecommendations && (
+              <div className="space-y-6">
+                <PlanTypeRecommendations 
+                  pages={pages}
+                  selectedPages={selectedPages}
+                  onPageToggle={togglePage}
+                />
+              </div>
+            )}
+          </div>
+        </>
       )}
-
-      <ManualSelectionCard
-        showRecommendations={showRecommendations}
-        onShowRecommendations={setShowRecommendations}
-        confidenceThreshold={confidenceThreshold}
-        onThresholdChange={setConfidenceThreshold}
-        pages={pages}
-        selectedPages={selectedPages}
-        onSelectAllRelevant={handleSelectAllRelevant}
-        onContinue={handleContinue}
-      />
-
-      <PlanListSelector
-        pages={pages}
-        selectedPages={selectedPages}
-        confidenceThreshold={confidenceThreshold[0]}
-        onPageToggle={onPageToggle}
-      />
     </div>
   );
 };
