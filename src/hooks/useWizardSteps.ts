@@ -6,7 +6,7 @@ import { useStepPersistence } from "./wizardSteps/useStepPersistence";
 import { useStepState } from "./wizardSteps/useStepState";
 import { useStepNavigation } from "./wizardSteps/useStepNavigation";
 
-export { StepData } from "./wizardSteps/types";
+export type { StepData } from "./wizardSteps/types";
 
 export const useWizardSteps = (projectId: string, overlays: PlanOverlay[]) => {
   const { saving } = useWizardProgress(projectId);
