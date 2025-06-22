@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,28 +7,65 @@ import { usePageSelection } from '@/hooks/usePageSelection';
 import { LoadingCard } from './pageSelection/LoadingCard';
 import { LocationCard } from './pageSelection/LocationCard';
 import { ManualSelectionCard } from './pageSelection/ManualSelectionCard';
-import { PlanTypeRecommendations } from './pageSelection/PlanTypeRecommendations';
+import { PlanTypeRecommendations } from './PlanTypeRecommendations';
 import { MobileOptimizedPageGrid } from '../MobileOptimizedPageGrid';
 import { PageSelectionDebugCard } from "./pageSelection/PageSelectionDebugCard";
 
-export const EnhancedWizardPageSelection = () => {
+interface EnhancedWizardPageSelectionProps {
+  pages?: any[];
+  selectedPages?: Set<string>;
+  loading?: boolean;
+  onPageToggle?: (pageId: string) => void;
+  onContinue?: (selectedPages: string[]) => void;
+}
+
+export const EnhancedWizardPageSelection = ({
+  pages: propPages,
+  selectedPages: propSelectedPages,
+  loading: propLoading,
+  onPageToggle: propOnPageToggle,
+  onContinue: propOnContinue
+}: EnhancedWizardPageSelectionProps = {}) => {
   const { id } = useParams();
-  const { pages, loading } = useProjectData(id!);
+  const { pages: hookPages, loading: hookLoading } = useProjectData(id!);
   const [selectedState, setSelectedState] = useState('');
   const [showRecommendations, setShowRecommendations] = useState(false);
   const [confidenceThreshold, setConfidenceThreshold] = useState([0.7]);
+  
+  // Use props if provided, otherwise use hook data
+  const pages = propPages || hookPages;
+  const loading = propLoading !== undefined ? propLoading : hookLoading;
   
   const {
     selectedPages,
     handlePageToggle: togglePage,
     handlePageSelectionContinue: handleContinue
-  } = usePageSelection(id!, [], () => {}, () => {}, () => {});
+  } = usePageSelection(id!, [], () => {}, () => {}, () => true);
+
+  // Use prop handlers if provided, otherwise use hook handlers
+  const onPageToggle = propOnPageToggle || togglePage;
+  const onContinue = propOnContinue || ((selectedPageIds: string[]) => handleContinue(selectedPageIds));
+
+  const actualSelectedPages = propSelectedPages || selectedPages;
 
   const selectAllRelevant = () => {
     const relevant = pages
       .filter(page => page.confidence >= confidenceThreshold[0])
       .map(page => page.id);
-    // This would need to be connected to the actual selection logic
+    relevant.forEach(pageId => onPageToggle(pageId));
+  };
+
+  const handleContinueWrapper = () => {
+    const selectedPageIds = Array.from(actualSelectedPages);
+    onContinue(selectedPageIds);
+  };
+
+  const handleRecommendationApply = (recommendedPageIds: string[]) => {
+    recommendedPageIds.forEach(pageId => {
+      if (!actualSelectedPages.has(pageId)) {
+        onPageToggle(pageId);
+      }
+    });
   };
 
   return (
@@ -55,9 +93,9 @@ export const EnhancedWizardPageSelection = () => {
             confidenceThreshold={confidenceThreshold}
             onThresholdChange={setConfidenceThreshold}
             pages={pages}
-            selectedPages={selectedPages}
+            selectedPages={actualSelectedPages}
             onSelectAllRelevant={selectAllRelevant}
-            onContinue={handleContinue}
+            onContinue={handleContinueWrapper}
           />
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -65,13 +103,13 @@ export const EnhancedWizardPageSelection = () => {
               {!showRecommendations ? (
                 <MobileOptimizedPageGrid
                   pages={pages}
-                  selectedPages={selectedPages}
+                  selectedPages={actualSelectedPages}
                   confidenceThreshold={confidenceThreshold}
                   loading={loading}
-                  onPageToggle={togglePage}
+                  onPageToggle={onPageToggle}
                   onConfidenceChange={setConfidenceThreshold}
                   onSelectAllRelevant={selectAllRelevant}
-                  onContinue={handleContinue}
+                  onContinue={handleContinueWrapper}
                 />
               ) : (
                 <Card className="rounded-2xl shadow-lg">
@@ -81,13 +119,13 @@ export const EnhancedWizardPageSelection = () => {
                   <CardContent>
                     <MobileOptimizedPageGrid
                       pages={pages}
-                      selectedPages={selectedPages}
+                      selectedPages={actualSelectedPages}
                       confidenceThreshold={confidenceThreshold}
                       loading={loading}
-                      onPageToggle={togglePage}
+                      onPageToggle={onPageToggle}
                       onConfidenceChange={setConfidenceThreshold}
                       onSelectAllRelevant={selectAllRelevant}
-                      onContinue={handleContinue}
+                      onContinue={handleContinueWrapper}
                     />
                   </CardContent>
                 </Card>
@@ -98,8 +136,8 @@ export const EnhancedWizardPageSelection = () => {
               <div className="space-y-6">
                 <PlanTypeRecommendations 
                   pages={pages}
-                  selectedPages={selectedPages}
-                  onPageToggle={togglePage}
+                  selectedState={selectedState}
+                  onRecommendationApply={handleRecommendationApply}
                 />
               </div>
             )}
