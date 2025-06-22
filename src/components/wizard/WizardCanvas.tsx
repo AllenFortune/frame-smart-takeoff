@@ -1,6 +1,9 @@
 
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { InteractiveCanvas } from "@/components/InteractiveCanvas";
+import { PdfViewer } from "@/components/pdf/PdfViewer";
+import { ViewToggle } from "./ViewToggle";
 import { PlanPage } from "@/hooks/useProjectData";
 import { AlertCircle, FileText, Loader2 } from "lucide-react";
 import { isSignedUrlExpired, isPublicUrl } from "@/lib/storage";
@@ -9,16 +12,27 @@ interface WizardCanvasProps {
   currentPage?: PlanPage;
   currentOverlay?: any;
   isLoading?: boolean;
+  projectId?: string; // Add projectId to construct PDF URL
 }
 
-export const WizardCanvas = ({ currentPage, currentOverlay, isLoading }: WizardCanvasProps) => {
+export const WizardCanvas = ({ currentPage, currentOverlay, isLoading, projectId }: WizardCanvasProps) => {
+  const [viewMode, setViewMode] = useState<'pdf' | 'image'>('image');
+
   const hasValidImage = currentPage?.img_url && 
     (isPublicUrl(currentPage.img_url) || !isSignedUrlExpired(currentPage.img_url)) && 
     currentPage.class !== 'upload_failed';
 
+  // Construct PDF URL from project ID and page number
+  const pdfUrl = projectId && currentPage ? 
+    `https://erfbmgcxpmtnmkffqsac.supabase.co/storage/v1/object/public/plan-pdfs/${projectId}/plan.pdf` : 
+    null;
+
+  const pdfAvailable = Boolean(pdfUrl && currentPage);
+
   console.log('WizardCanvas - Current page:', currentPage?.page_no);
-  console.log('WizardCanvas - Has valid image:', hasValidImage);
-  console.log('WizardCanvas - Image URL:', currentPage?.img_url?.substring(0, 50) + '...');
+  console.log('WizardCanvas - View mode:', viewMode);
+  console.log('WizardCanvas - PDF available:', pdfAvailable);
+  console.log('WizardCanvas - PDF URL:', pdfUrl);
   
   return (
     <Card className="rounded-2xl shadow-lg">
@@ -31,41 +45,64 @@ export const WizardCanvas = ({ currentPage, currentOverlay, isLoading }: WizardC
             </div>
           </div>
         ) : currentPage ? (
-          hasValidImage ? (
-            <div className="space-y-4">
+          <div className="space-y-4">
+            {/* Page Header with View Toggle */}
+            <div className="flex items-center justify-between">
               <div className="text-sm text-muted-foreground bg-muted/20 p-2 rounded">
                 <strong>Viewing:</strong> Page {currentPage.page_no}
                 {currentPage.sheet_number && ` - ${currentPage.sheet_number}`}
                 {currentPage.description && ` (${currentPage.description})`}
               </div>
+              
+              <ViewToggle
+                currentView={viewMode}
+                onViewChange={setViewMode}
+                pdfAvailable={pdfAvailable}
+              />
+            </div>
+
+            {/* Content Area */}
+            {viewMode === 'pdf' && pdfAvailable ? (
+              <PdfViewer
+                pdfUrl={pdfUrl}
+                pageNumber={currentPage.page_no}
+                geojson={currentOverlay?.geojson}
+                className="h-96"
+              />
+            ) : hasValidImage ? (
               <InteractiveCanvas
                 imageUrl={currentPage.img_url || ''}
                 geojson={currentOverlay?.geojson}
                 className="h-96"
               />
-            </div>
-          ) : (
-            <div className="h-96 flex items-center justify-center text-muted-foreground bg-muted rounded-lg border-2 border-dashed border-muted-foreground/20">
-              <div className="text-center space-y-4">
-                <div className="flex items-center justify-center">
-                  <AlertCircle className="w-8 h-8 text-amber-500 mr-2" />
-                  <FileText className="w-8 h-8 text-muted-foreground" />
-                </div>
-                <div>
-                  <p className="font-medium">
-                    {currentPage.class === 'upload_failed' ? 'Upload Failed' : 'Image Not Available'}
-                  </p>
-                  <p className="text-sm">Page {currentPage.page_no} - {currentPage.class}</p>
-                  <p className="text-xs mt-2">
-                    {currentPage.class === 'upload_failed' 
-                      ? 'This page failed to upload during processing'
-                      : 'The image URL may have expired or the file is not accessible'
-                    }
-                  </p>
+            ) : (
+              <div className="h-96 flex items-center justify-center text-muted-foreground bg-muted rounded-lg border-2 border-dashed border-muted-foreground/20">
+                <div className="text-center space-y-4">
+                  <div className="flex items-center justify-center">
+                    <AlertCircle className="w-8 h-8 text-amber-500 mr-2" />
+                    <FileText className="w-8 h-8 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="font-medium">
+                      {currentPage.class === 'upload_failed' ? 'Upload Failed' : 'Image Not Available'}
+                    </p>
+                    <p className="text-sm">Page {currentPage.page_no} - {currentPage.class}</p>
+                    <p className="text-xs mt-2">
+                      {currentPage.class === 'upload_failed' 
+                        ? 'This page failed to upload during processing'
+                        : 'The image URL may have expired or the file is not accessible'
+                      }
+                    </p>
+                    {pdfAvailable && (
+                      <p className="text-xs mt-1 text-primary">
+                        Try switching to PDF view above
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          )
+            )}
+          </div>
         ) : (
           <div className="h-96 flex items-center justify-center text-muted-foreground bg-muted rounded-lg">
             <div className="text-center">

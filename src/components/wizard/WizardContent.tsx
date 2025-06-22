@@ -1,3 +1,4 @@
+
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { WizardPageSelection } from "./WizardPageSelection";
 import { WizardAnalysisStep } from "./WizardAnalysisStep";
@@ -24,6 +25,7 @@ interface WizardContentProps {
   onPreviousStep: () => void;
   canNavigateToStep: (stepId: string) => boolean;
   onStepChange: (stepId: string) => void;
+  projectId?: string; // Add projectId prop
 }
 
 export const WizardContent = ({
@@ -116,6 +118,7 @@ export const WizardContent = ({
                 onPreviousStep={onPreviousStep}
                 canGoBack={canGoBack}
                 canNavigateToStep={canNavigateToStep}
+                projectId={id} // Pass projectId to WizardAnalysisStep
               />
             )}
           </TabsContent>

@@ -93,6 +93,7 @@ export const useProjectWizard = () => {
     handlePreviousStep,
     handleResetProgress,
     handleStepChange,
-    canNavigateToStep
+    canNavigateToStep,
+    projectId: id // Add projectId as a direct export for easy access
   };
 };

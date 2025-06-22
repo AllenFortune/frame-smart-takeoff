@@ -27,7 +27,8 @@ const ProjectWizard = () => {
     handlePreviousStep,
     handleResetProgress,
     handleStepChange,
-    canNavigateToStep
+    canNavigateToStep,
+    projectId
   } = useProjectWizard();
 
   if (!id) {
@@ -74,6 +75,7 @@ const ProjectWizard = () => {
           onPreviousStep={handlePreviousStep}
           canNavigateToStep={canNavigateToStep}
           onStepChange={handleStepChange}
+          projectId={projectId} // Pass projectId to WizardContent
         />
       </div>
     </div>
