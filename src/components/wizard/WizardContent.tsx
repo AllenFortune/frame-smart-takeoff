@@ -1,6 +1,6 @@
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
-import { WizardPageSelection } from "./WizardPageSelection";
+import { EnhancedWizardPageSelection } from "./EnhancedWizardPageSelection";
 import { WizardAnalysisStep } from "./WizardAnalysisStep";
 import { PlanPage } from "@/hooks/useProjectData";
 import { StepData } from "@/hooks/useWizardSteps";
@@ -25,7 +25,7 @@ interface WizardContentProps {
   onPreviousStep: () => void;
   canNavigateToStep: (stepId: string) => boolean;
   onStepChange: (stepId: string) => void;
-  projectId?: string; // Add projectId prop
+  projectId?: string;
 }
 
 export const WizardContent = ({
@@ -97,7 +97,7 @@ export const WizardContent = ({
         {steps.map((step) => (
           <TabsContent key={step.id} value={step.id}>
             {step.id === "pages" ? (
-              <WizardPageSelection
+              <EnhancedWizardPageSelection
                 pages={pages}
                 selectedPages={selectedPages}
                 loading={loading}
@@ -118,7 +118,7 @@ export const WizardContent = ({
                 onPreviousStep={onPreviousStep}
                 canGoBack={canGoBack}
                 canNavigateToStep={canNavigateToStep}
-                projectId={id} // Pass projectId to WizardAnalysisStep
+                projectId={id}
               />
             )}
           </TabsContent>
